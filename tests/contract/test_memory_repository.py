@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from lab.memory.model import Memory, render_memory
 from lab.memory.repository import MarkdownMemoryRepository
 
@@ -64,3 +66,39 @@ def test_repository_rejects_symlinked_memory(tmp_path: Path) -> None:
 
     assert count == 0
     assert errors == [f"unsafe memory path: {tmp_path / 'linked.md'}"]
+
+
+def test_validation_rejects_missing_root(tmp_path: Path) -> None:
+    root = tmp_path / "missing"
+
+    assert MarkdownMemoryRepository(root).validate() == (
+        0,
+        [f"memory directory does not exist: {root}"],
+    )
+
+
+def test_save_rejects_symlinked_ancestor_without_writing_outside(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "link").symlink_to(outside, target_is_directory=True)
+    repository = MarkdownMemoryRepository(base / "link" / "nested-items")
+
+    with pytest.raises(ValueError, match="symlinked ancestor"):
+        repository.save(memory("ADR-001"))
+
+    assert not (outside / "nested-items").exists()
+
+
+def test_load_rejects_symlinked_ancestor(tmp_path: Path) -> None:
+    outside = tmp_path / "outside" / "nested-items"
+    outside.mkdir(parents=True)
+    (outside / "ADR-001.md").write_text(render_memory(memory("ADR-001")), encoding="utf-8")
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "link").symlink_to(outside.parent, target_is_directory=True)
+    repository = MarkdownMemoryRepository(base / "link" / "nested-items")
+
+    with pytest.raises(ValueError, match="symlinked ancestor"):
+        repository.load_all()

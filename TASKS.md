@@ -159,6 +159,7 @@ PASS
 
 Status: READY_FOR_REVIEW
 Implementer commit: HEAD (resolved to the commit supplied for review)
+Review round: 2
 
 ### Acceptance criteria
 
@@ -184,6 +185,21 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   `Success: no issues found in 35 source files`; pytest `18 passed in 1.43s`; the valid corpus
   exited 0 with `valid: 1 memories`; the invalid-reference corpus exited 1 with `ADR-002:
   supersedes unknown memory MISSING`.
+- Re-review fix: missing configured roots now fail validation, and repository save/load rejects a
+  symlink in any configured-root ancestor before directory creation or file access.
+- Re-review regressions: contract tests cover missing-root validation, save through an ancestor
+  symlink with an assertion that no outside directory/file was created, and load through an ancestor
+  symlink; an integration test covers the missing-root CLI exit and diagnostic.
+- Re-review commands: `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check
+  .`; `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run lab memory validate --directory
+  /private/tmp/p03-round2-evidence.dLrBac/missing`; `git diff --check`.
+- Re-review results: Ruff format `35 files already formatted`; Ruff lint `All checks passed!`;
+  mypy `Success: no issues found in 35 source files`; pytest `22 passed in 1.53s`; missing-root CLI
+  validation exited 1 with `memory directory does not exist:
+  /private/tmp/p03-round2-evidence.dLrBac/missing`; diff check exited 0.
 
 ### Adversarial review
 

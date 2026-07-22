@@ -13,9 +13,8 @@ class MarkdownMemoryRepository:
         return [self._read(path) for path in self._paths()]
 
     def save(self, memory: Memory) -> Path:
+        self._check_root(require_exists=False)
         self.root.mkdir(parents=True, exist_ok=True)
-        if self.root.is_symlink():
-            raise ValueError(f"unsafe memory directory: {self.root}")
         path = self.root / f"{memory.id}.md"
         if path.is_symlink() or not path.resolve().is_relative_to(self.root.resolve()):
             raise ValueError(f"unsafe memory path: {path}")
@@ -39,10 +38,7 @@ class MarkdownMemoryRepository:
         return len(memories), errors
 
     def _paths(self) -> list[Path]:
-        if not self.root.exists():
-            return []
-        if not self.root.is_dir() or self.root.is_symlink():
-            raise ValueError(f"unsafe memory directory: {self.root}")
+        self._check_root(require_exists=True)
         root = self.root.resolve()
         paths = sorted(
             self.root.rglob("*.md"), key=lambda path: path.relative_to(self.root).as_posix()
@@ -51,6 +47,18 @@ class MarkdownMemoryRepository:
             if path.is_symlink() or not path.resolve().is_relative_to(root):
                 raise ValueError(f"unsafe memory path: {path}")
         return paths
+
+    def _check_root(self, *, require_exists: bool) -> None:
+        absolute = self.root.absolute()
+        for path in (*reversed(absolute.parents), absolute):
+            if path.is_symlink():
+                raise ValueError(
+                    f"unsafe memory directory: {self.root} (symlinked ancestor: {path})"
+                )
+        if require_exists and not self.root.exists():
+            raise ValueError(f"memory directory does not exist: {self.root}")
+        if self.root.exists() and not self.root.is_dir():
+            raise ValueError(f"unsafe memory directory: {self.root}")
 
     def _read(self, path: Path) -> Memory:
         try:

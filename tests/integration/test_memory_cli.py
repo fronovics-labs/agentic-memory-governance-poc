@@ -40,3 +40,17 @@ def test_memory_validate_command_reports_valid_and_malformed_files(tmp_path: Pat
     assert passed.stdout == "valid: 1 memories\n"
     assert failed.returncode == 1
     assert "broken.md: missing closing TOML delimiter" in failed.stderr
+
+
+def test_memory_validate_command_rejects_missing_directory(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+
+    result = subprocess.run(
+        [sys.executable, "-m", "lab", "memory", "validate", "--directory", str(missing)],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stderr == f"memory directory does not exist: {missing}\n"
