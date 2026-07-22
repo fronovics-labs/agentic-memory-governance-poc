@@ -279,16 +279,35 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `fd656e9221537398fe8c11874833437804ea7d43`; clean before review.
+- Diff inspected: complete six-file P04 diff against parent `e15045c`, plus every retrieval,
+  renderer, repository-port, and CLI caller.
+- Counterexamples: shuffled fake-repository order, duplicate/case/Unicode/punctuation tokens,
+  nearby words, stable ties, inclusive/open/future/expired dates, inactive records, successor chains,
+  inactive/future/expired/wrong-scope successors, empty/global/multiple scopes, exact/`*`/`**` glob
+  boundaries, sibling prefixes, cycles from an invalid fake port, and instruction-like rendered bodies
+  were exercised. Ranking/rendering remained byte-stable and normal controls passed.
+- SOLID findings: retrieval depends only on a one-method `MemoryRepository` protocol and the model;
+  it has no filesystem/Markdown adapter dependency. Rendering is separate, and the CLI alone composes
+  the concrete repository. No P05+, embedding, vector, strategy, or speculative abstraction exists.
+- DRY findings: lifecycle/supersession filtering, tokenization/scoring, glob matching, tie-breaking,
+  and context rendering each have one production implementation shared by search/context.
+- Defects: `context --path` is optional; when omitted, `_applies_to_path(..., None)` accepts every
+  scoped memory, so a context command returns application-only memory without any target path.
+  Context must require an explicit path to enforce its promised scope filter. Also,
+  `PurePosixPath` preserves `..` components and `_path_matches` lets `**` consume them: target
+  `sample_app/application/../domain/order.py` matches scope `sample_app/application/**` and leaks
+  application memory into a logically domain path. Reject non-normalized/unsafe target paths (or
+  normalize without allowing root escape) before matching.
+- Commands executed: `uv run ruff format --check .` (37 files); `uv run ruff check .`; `uv run
+  mypy` (37 files); `uv run pytest -q` (29 passed); `git diff --check`; direct shuffled lifecycle,
+  supersession, token/rank, glob/path, render-boundary, repository-port AST, and subprocess CLI
+  success/error/stability checks. Standard gates passed; both wrong-scope counterexamples failed.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P05 — Governance engine
 
