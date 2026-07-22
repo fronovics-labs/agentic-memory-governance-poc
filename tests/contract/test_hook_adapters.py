@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -81,6 +83,22 @@ def _specific(output: dict[str, object]) -> dict[str, object]:
     value = output["hookSpecificOutput"]
     assert isinstance(value, dict)
     return value
+
+
+def _run_adapter(
+    client: str, payload: object, *, raw: bool = False
+) -> subprocess.CompletedProcess[str]:
+    root = Path(__file__).parents[2]
+    stdin = str(payload) if raw else json.dumps(payload)
+    return subprocess.run(
+        [sys.executable, str(root / "scripts" / "lab-hook"), client],
+        cwd=root,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "LAB_GOVERNANCE_MODE": "block"},
+    )
 
 
 def test_prompt_context_is_identical_and_contains_memory_provenance(tmp_path: Path) -> None:
@@ -180,6 +198,68 @@ def test_pre_tool_allows_adjacent_safe_operations(
 
 
 @pytest.mark.parametrize("adapter", ADAPTERS)
+def test_safe_operation_does_not_auto_approve_client_permission(
+    adapter: Adapter, tmp_path: Path
+) -> None:
+    output = adapter(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+        },
+        _core(tmp_path),
+    )
+
+    assert "permissionDecision" not in _specific(output)
+
+
+@pytest.mark.parametrize("adapter", ADAPTERS)
+def test_apply_patch_move_destination_is_protected(adapter: Adapter, tmp_path: Path) -> None:
+    output = adapter(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n"
+                    "*** Update File: notes.txt\n"
+                    "*** Move to: .codex/hooks.json\n"
+                    "@@\n-old\n+new\n"
+                    "*** End Patch\n"
+                )
+            },
+        },
+        _core(tmp_path),
+    )
+
+    assert _specific(output)["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("adapter", ADAPTERS)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo ready\ngit reset --hard HEAD",
+        "echo $(git reset --hard HEAD)",
+        "bash -lc 'git reset --hard HEAD'",
+    ],
+)
+def test_nested_destructive_shell_commands_are_denied(
+    adapter: Adapter, command: str, tmp_path: Path
+) -> None:
+    output = adapter(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        },
+        _core(tmp_path),
+    )
+
+    assert _specific(output)["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("adapter", ADAPTERS)
 def test_pre_tool_denies_indirect_protected_write(adapter: Adapter, tmp_path: Path) -> None:
     output = adapter(
         {
@@ -204,6 +284,57 @@ def test_stop_audit_logs_but_allows_and_block_requires_continuation(
 
     assert audit == {"continue": True, "systemMessage": "[test.completion] tests failed"}
     assert blocked == {"decision": "block", "reason": "[test.completion] tests failed"}
+
+
+@pytest.mark.parametrize("adapter", ADAPTERS)
+def test_stop_does_not_repeat_an_identical_block_on_active_continuation(
+    adapter: Adapter, tmp_path: Path
+) -> None:
+    output = adapter(
+        {"hook_event_name": "Stop", "stop_hook_active": True},
+        _core(tmp_path, mode="block", completion_failure=True),
+    )
+
+    assert output.get("decision") != "block"
+
+
+@pytest.mark.parametrize("client", ["claude", "codex"])
+def test_nested_cwd_write_is_denied_by_real_adapter_process(client: str) -> None:
+    root = Path(__file__).parents[2]
+    completed = _run_adapter(
+        client,
+        {
+            "session_id": "session-1",
+            "cwd": str(root / "src"),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "../.codex/hooks.json", "content": "{}"},
+        },
+    )
+
+    assert completed.returncode == 0
+    output = json.loads(completed.stdout)
+    assert _specific(output)["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize("client", ["claude", "codex"])
+def test_malformed_pre_tool_input_fails_closed_in_real_adapter_process(client: str) -> None:
+    root = Path(__file__).parents[2]
+    completed = _run_adapter(
+        client,
+        {
+            "session_id": "session-1",
+            "cwd": str(root),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": [],
+        },
+    )
+
+    output = json.loads(completed.stdout)
+    specific = output.get("hookSpecificOutput")
+    denied = isinstance(specific, dict) and specific.get("permissionDecision") == "deny"
+    assert completed.returncode == 2 or denied
 
 
 @pytest.mark.parametrize(

@@ -478,16 +478,40 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `38bf7278e8662d346faba5504b8d2915d15d70d5`; clean before review.
+- Diff inspected: complete nine-file P06 diff against the accepted P05 review commit, including both
+  client configurations, executable boundary, shared adapter helpers/core, tests, and tracker. No P07
+  run-worktree or baseline-lifecycle implementation leaked into the change.
+- Counterexamples: both real adapter subprocesses allow `../.codex/hooks.json` from a nested `src/`
+  event cwd and return exit zero plus an unsupported `continue: false` response for malformed
+  `PreToolUse`. Both in-process clients allow destructive commands after a shell newline, in `$()`
+  command substitution, and under `bash -lc`; both repeatedly block a `Stop` payload with
+  `stop_hook_active: true`. An apply-patch move into `.codex/hooks.json` was denied, and the existing
+  safe read/write lookalikes remained allowed.
+- SOLID findings: lifecycle policy is centralized in `HookCore`; concrete adapters are thin and have
+  no P07 responsibilities. However, `HookRequest` omits event cwd and Stop continuation state, so the
+  shared core cannot implement the required client-neutral path and recursion policy correctly.
+- DRY findings: Claude and Codex delegate to one translator, renderer, and core with no duplicated
+  business-rule lists. The shared implementation means every defect below affects both clients
+  identically rather than being an adapter-parity discrepancy.
+- Defects: safe `PreToolUse` results emit `permissionDecision: "allow"`, which auto-approves ordinary
+  Claude tool calls instead of reporting no governance objection and preserving the client's normal
+  permission flow. Relative tool paths are resolved against repository root rather than event cwd,
+  so protected writes from nested directories fail open. Shell parsing treats newlines and command
+  substitutions as ordinary tokens and recognizes only exact `-c`, allowing valid destructive reset
+  commands through. Stop input discards `stop_hook_active`, so an unchanged completion violation is
+  re-blocked until the client's continuation cap. Finally, malformed `PreToolUse` input exits zero
+  with top-level `continue: false`; Codex does not support that field for this event and continues the
+  tool call, so the guard boundary fails open instead of denying or exiting 2.
+- Commands executed: Ruff format check, Ruff lint, mypy, full pytest before adversarial tests, focused
+  hook contracts after adversarial tests, diff check, and real Claude/Codex adapter subprocesses.
+  Standard gates passed with `114 passed`; the expanded hook contracts produced `14 failed, 55
+  passed`, covering all five defects above.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P07 — Baseline, worktree and reset lifecycle
 
