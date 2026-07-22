@@ -128,16 +128,32 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `14c30d9478508bfc9e801ed5d464f136e85cd82a`; clean before review.
+- Diff inspected: complete eight-file P02 diff against parent `066cccb`, plus every caller of
+  `Order`, `OrderService`, `OrderRepository`, and `SQLiteOrderRepository`.
+- Counterexamples: separate OS processes created orders in reverse lexical order, retrieved them,
+  and listed them twice after reopening SQLite; output remained ordered by ID and persisted rows
+  matched the database. Missing, duplicate, zero, non-integer, blank, and missing-argument inputs
+  returned nonzero with no success output or added row. A quoted SQL-like ID round-tripped as data.
+  An invalid database location returned nonzero with no success output. Direct domain/service calls
+  rejected empty, whitespace-only, non-string, boolean, zero, and negative values, while nonblank
+  whitespace-containing text remained valid as the documented rule permits.
+- SOLID findings: domain imports only the standard library; application depends on the domain and
+  the minimal three-method repository port; infrastructure depends inward on that port/domain; only
+  the CLI selects SQLite. The infrastructure traceback for an invalid database location is not a
+  P02 blocker because the task requires failure, not a friendly operational-error contract.
+- DRY findings: order validation exists only in `Order`; the CLI and service reuse it. SQLite owns
+  persistence constraints and maps its primary-key failure to the application error once. No
+  duplicated production business rule or speculative abstraction found.
+- Commands executed: `uv run ruff format --check .` (32 files); `uv run ruff check .`; `uv run
+  mypy` (32 files); `uv run pytest -q` (9 passed); `git diff --check`; independent fresh-process
+  CLI/SQLite/order/injection/failure checks; direct domain/service validation and AST import-boundary
+  checks. All acceptance gates passed.
 
 ### Verdict
 
-PENDING
+PASS
 
 ## P03 — Memory model and Markdown repository
 
