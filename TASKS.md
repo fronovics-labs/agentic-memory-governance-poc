@@ -341,8 +341,8 @@ PASS
 
 ## P05 — Governance engine
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -354,9 +354,22 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
+- Files changed: `src/lab/governance/model.py`, `src/lab/governance/engine.py`,
+  `src/lab/governance/checks/__init__.py`, `src/lab/governance/checks/platform.py`,
+  `tests/unit/test_governance_checks.py`, `tests/contract/test_governance_engine.py`, and this
+  tracker.
 - Commands executed:
-- Results:
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest tests/unit/test_governance_checks.py tests/contract/test_governance_engine.py -q`
+  - A direct Python invocation registering all three platform checks and evaluating a failing
+    completion context in both `audit` and `block` modes.
+- Results: Ruff format `40 files already formatted`; Ruff lint `All checks passed!`; mypy
+  `Success: no issues found in 40 source files`; pytest `46 passed in 1.91s`; focused governance
+  tests `7 passed in 0.04s`; direct evaluation returned `audit` allowed with all 5 violations and
+  `block` rejected with the same 5 violations.
 
 ### Adversarial review
 
