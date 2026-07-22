@@ -692,10 +692,24 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 - Commands executed: focused launch-isolation pytest, Ruff format check, Ruff lint, mypy, full pytest,
   full P08 diff inspection, diff check, local Codex CLI option inspection, and a disposable-run direct
   launch probe. Standard/focused gates passed; the direct probe reproduced all three defects.
+- Round 2 clean checkout: detached reviewer worktree at
+  `5b5d6dad90ef23a224337b9d9d69a897125bcc69`; clean before re-review.
+- Round 2 diff inspected: bounded three-file fix delta from rejected commit `4b4df3a` contains only
+  launch invariant validation/rollback, focused regressions, and tracker evidence; no P09 scope.
+- Round 2 counterexamples: Codex cwd/config/profile/feature and Claude settings/session/directory
+  override forms now reject at planning and launch boundaries; a plan with audit mode for a verified
+  block run rejects; runner failure removes the newly created state and partial logs, then the same
+  clean launch plan succeeds on retry.
+- Round 2 SOLID/DRY findings: one client-argument validator is reused at plan and execution boundaries,
+  and one rollback path owns cleanup for both clients. Exact cwd/home/mode/path invariants are checked
+  immediately before the runner without moving policy into the CLI.
+- Round 2 commands executed: focused argument/mode/rollback regressions (`2 passed`), Ruff format
+  check (`44 files`), Ruff lint, mypy (`44 source files`), full pytest, and fix-delta diff check. All
+  passed.
 
 ### Verdict
 
-CHANGES_REQUESTED
+PASS
 
 ## P09 — End-to-end canary
 
