@@ -187,16 +187,35 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `2e2c3542e05c6e4edb76238931f4276c27ad8743`; clean before review.
+- Diff inspected: complete seven-file P03 diff against parent `e56b068`, plus all model,
+  repository, validation CLI, and test callers.
+- Counterexamples: all required-field omissions and wrong types were rejected; Unicode, escaping,
+  a body `+++` line, empty references/open dates, bounded dates, self/2/3-node cycles, dangling
+  supersedes, duplicate IDs, and acyclic chain/diamond controls behaved deterministically. Recursive
+  path ordering, invalid UTF-8, final-root/file symlinks, repeated CLI diagnostics, and traversal-like
+  identifiers were also exercised.
+- SOLID findings: parsing/model invariants and filesystem storage remain separate from the still-inert
+  retrieval, context-rendering, governance, and hook modules. No P04+ behavior, embedding, vector
+  dependency, broad interface, or speculative abstraction was added.
+- DRY findings: required fields, date/reference rules, TOML parsing/rendering, and collection graph
+  validation each have one production implementation.
+- Defects: `MarkdownMemoryRepository._paths()` returns an empty list when the configured root does
+  not exist, so `lab memory validate --directory <typo>` exits 0 with `valid: 0 memories`. A missing
+  repository root must fail honestly rather than falsely validate an unintended empty corpus.
+  `save()` checks only whether the final root component is a symlink; with
+  `<base>/link/nested-items` where `link` targets an outside directory, it creates
+  `nested-items/ADR.md` outside `<base>` and accepts it because both comparisons use the resolved
+  outside root. Symlinked ancestors must be rejected before directory creation or file access.
+- Commands executed: `uv run ruff format --check .` (35 files); `uv run ruff check .`; `uv run
+  mypy` (35 files); `uv run pytest -q` (18 passed); `git diff --check`; direct field/type/date/
+  round-trip/reference/cycle/DAG checks; recursive ordering, missing-root, traversal/symlink, UTF-8,
+  and repeated subprocess CLI checks. Standard gates passed; the two boundary counterexamples did not.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P04 — Retrieval and context rendering
 
