@@ -92,6 +92,47 @@ Review round: 2
 
 PASS
 
+### P01 documentation follow-up
+
+Follow-up status: READY_FOR_REVIEW
+Follow-up implementer commit: HEAD (resolved to the commit supplied for review)
+
+#### Follow-up acceptance
+
+- `README.md` is a concise project guide covering the Part 1 purpose and non-goals,
+  prerequisites, locked setup, required checks, synthetic order CLI, the complete memory format,
+  memory commands, component and hook flow, governance modes, baseline and run lifecycles,
+  external artifacts, client launch isolation, project layout, and source-of-truth pointers.
+- Documented commands and references agree with the current CLI and repository behavior.
+- Existing P01 review history and PASS verdict remain unchanged.
+
+#### Follow-up implementer evidence
+
+- Files changed: `README.md` and this distinct P01 follow-up record in `TASKS.md`; no production
+  code changed.
+- Setup check: `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv sync --frozen --dev`
+  exited 0 with `Checked 13 packages in 1ms`.
+- Required gates: `uv run ruff check .` returned `All checks passed!`; `uv run mypy` returned
+  `Success: no issues found in 45 source files`; `uv run pytest` completed with `156 passed in
+  103.45s`.
+- CLI help matrix: 14/14 current surfaces exited 0: root `lab`, memory root and three memory
+  commands, both baseline commands, run root and five run commands, and the synthetic order CLI.
+- Documented order example: create, get, and list each exited 0 against an isolated SQLite file;
+  the persisted row was `{"item": "adapter", "order_id": "order-001", "quantity": 2}`.
+- Documented memory example: validation exited 0 with `valid: 1 memories`; search and scoped
+  context both returned `[POLICY-001 | mandatory] Order changes must preserve deterministic
+  repository behavior.`
+- Markdown sanity check: `20 shell commands parsed, 2 local references resolved, code fences
+  balanced`; `git diff --check` exited 0.
+
+#### Follow-up review
+
+PENDING — an independent reviewer must inspect this documentation-only follow-up.
+
+#### Follow-up verdict
+
+PENDING
+
 ## P02 — Synthetic order service
 
 Status: READY_FOR_REVIEW
