@@ -744,13 +744,28 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `53aa07831b8b72bd4e75f076c9642a41aa3838ca`; clean before review.
+- Diff inspected: complete two-file P09 delta from the accepted P08 review. The change is one
+  adversarial canary test plus tracker evidence; no production module, experiment task, seeded
+  architecture violation, metric, result store, comparison, or conclusion was added.
+- Counterexamples: two independent disposable canary executions each passed. Both clients produced
+  identical memory ID/authority/content context and denied protected writes plus a nested destructive
+  reset despite an explicit bypass prompt. The temporary test-owned check allowed/logged in audit,
+  blocked in block, and allowed after real resolution. Three production resets retained identical
+  commit/tree/manifest identities; archive preserved external patches/transcript/log/launch records;
+  separate Codex homes did not share a memory marker. The prerequisite gate found P01-P08 PASS.
+- SOLID findings: the canary composes accepted production repositories, adapters, governance engine,
+  baseline/workspace services, launch planner, and sample-app CLI. Its only fake is the external client
+  process runner, and the temporary check implements the existing protocol without entering
+  production registration.
+- DRY findings: no platform behavior is reimplemented in the canary. Small fixture helpers only copy
+  the tracked platform into a disposable Git repository, construct a protocol-compatible core, and
+  inspect shared client output.
+- Commands executed: focused adversarial canary twice (`2 passed` each), Ruff format check (`45
+  files`), Ruff lint, mypy (`45 source files`), full pytest, experiment-leakage search, full two-file
+  diff inspection, and diff check. All passed.
 
 ### Verdict
 
-PENDING
+PASS
