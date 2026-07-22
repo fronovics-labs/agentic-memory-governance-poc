@@ -194,7 +194,7 @@ def test_pre_tool_allows_adjacent_safe_operations(
         _core(tmp_path),
     )
 
-    assert _specific(output)["permissionDecision"] == "allow"
+    assert "permissionDecision" not in _specific(output)
 
 
 @pytest.mark.parametrize("adapter", ADAPTERS)

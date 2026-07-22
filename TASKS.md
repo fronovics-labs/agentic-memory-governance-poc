@@ -475,6 +475,14 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   wrappers deny; adjacent reads, verification, quoted text, and lookalike paths allow; audit Stop logs
   violations while allowing, block Stop returns continuation reasons; malformed JSON-domain inputs
   fail identically at both adapter boundaries.
+- Re-review fixes: safe tool calls now return no permission decision; event cwd is carried separately
+  from the discovered repository root; newline, subshell, command-substitution, and shell `-c` reset
+  forms deny without treating quoted text as execution; an active Stop continuation records failures
+  but does not block again; malformed `PreToolUse` returns the supported nested deny shape.
+- Re-review results: Ruff format `42 files already formatted`; Ruff lint `All checks passed!`; mypy
+  `Success: no issues found in 42 source files`; full pytest `130 passed in 2.26s`; focused hook
+  contracts `69 passed in 0.66s`. Direct subprocess checks confirmed a nested-cwd protected denial,
+  a malformed Claude denial, and a permission-neutral safe Codex response.
 
 ### Adversarial review
 

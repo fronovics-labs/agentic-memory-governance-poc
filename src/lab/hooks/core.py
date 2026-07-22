@@ -18,9 +18,9 @@ from lab.memory.repository import MarkdownMemoryRepository
 from lab.memory.retrieval import MemoryRepository, search_memories
 
 HookEvent = Literal["UserPromptSubmit", "PreToolUse", "Stop"]
-_PATCH_PATH = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
+_PATCH_PATH = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE)
 _COMMAND_PATH = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)")
-_SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
+_SHELL_SEPARATORS = {";", "&&", "||", "|", "&", "\n", "(", ")"}
 _READ_ONLY_COMMANDS = {
     "cat",
     "diff",
@@ -40,9 +40,11 @@ _READ_ONLY_COMMANDS = {
 @dataclass(frozen=True, slots=True)
 class HookRequest:
     event: HookEvent
+    cwd: str = ""
     prompt: str = ""
     tool_name: str = ""
     tool_input: Mapping[str, Any] | None = None
+    stop_hook_active: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +80,8 @@ class HookCore:
             return HookOutcome(additional_context=render_context(memories))
         if request.event == "PreToolUse":
             tool_input = request.tool_input or {}
-            paths = _changed_paths(request.tool_name, tool_input, self._root)
+            event_cwd = Path(request.cwd).resolve() if request.cwd else self._root
+            paths = _changed_paths(request.tool_name, tool_input, self._root, event_cwd)
             result = self._governance.evaluate(
                 CheckContext(
                     phase="pre_write",
@@ -108,7 +111,10 @@ class HookCore:
             ),
             self._mode,
         )
-        return HookOutcome(allowed=result.allowed, violations=result.violations)
+        return HookOutcome(
+            allowed=result.allowed or request.stop_hook_active,
+            violations=result.violations,
+        )
 
 
 def default_core(root: str | Path, mode: GovernanceMode) -> HookCore:
@@ -131,7 +137,12 @@ def format_violations(violations: tuple[Violation, ...]) -> str:
     )
 
 
-def _changed_paths(tool_name: str, tool_input: Mapping[str, Any], root: Path) -> tuple[str, ...]:
+def _changed_paths(
+    tool_name: str,
+    tool_input: Mapping[str, Any],
+    root: Path,
+    event_cwd: Path,
+) -> tuple[str, ...]:
     candidates: list[str] = []
     for key in ("file_path", "path"):
         value = tool_input.get(key)
@@ -143,16 +154,18 @@ def _changed_paths(tool_name: str, tool_input: Mapping[str, Any], root: Path) ->
         candidates.extend(_shell_write_paths(command))
         candidates.extend(_unsafe_command_path_mentions(command))
 
-    normalized = {_repository_path(candidate, root) for candidate in candidates}
+    normalized = {_repository_path(candidate, root, event_cwd) for candidate in candidates}
     return tuple(sorted(path for path in normalized if path is not None))
 
 
-def _repository_path(path: str, root: Path) -> str | None:
+def _repository_path(path: str, root: Path, event_cwd: Path) -> str | None:
     candidate = Path(path)
     if "\\" in path:
         return None
     try:
-        resolved = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+        resolved = (
+            candidate.resolve() if candidate.is_absolute() else (event_cwd / candidate).resolve()
+        )
         return resolved.relative_to(root).as_posix()
     except ValueError:
         return None
@@ -185,9 +198,20 @@ def _is_destructive(command: str) -> bool:
             return True
         if words[:3] in (["lab", "baseline", "freeze"], ["lab", "run", "reset"]):
             return True
-        if words and words[0] in {"bash", "sh", "zsh"} and "-c" in words:
-            index = words.index("-c")
-            if index + 1 < len(words) and _is_destructive(words[index + 1]):
+        if words and words[0] in {"bash", "sh", "zsh"}:
+            command_option = next(
+                (
+                    index
+                    for index, word in enumerate(words[1:], 1)
+                    if word.startswith("-") and "c" in word
+                ),
+                None,
+            )
+            if (
+                command_option is not None
+                and command_option + 1 < len(words)
+                and _is_destructive(words[command_option + 1])
+            ):
                 return True
     return False
 
@@ -236,7 +260,8 @@ def _is_read_only(words: list[str]) -> bool:
 
 
 def _shell_segments(command: str) -> list[list[str]]:
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
+    lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:

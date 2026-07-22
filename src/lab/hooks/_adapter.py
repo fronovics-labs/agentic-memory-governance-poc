@@ -16,19 +16,24 @@ Renderer = Callable[[HookRequest, HookOutcome], dict[str, object]]
 
 def request_from_json(payload: Mapping[str, Any]) -> HookRequest:
     event = _string(payload, "hook_event_name")
+    cwd = _optional_string(payload, "cwd")
     if event == "UserPromptSubmit":
-        return HookRequest(event="UserPromptSubmit", prompt=_string(payload, "prompt"))
+        return HookRequest(event="UserPromptSubmit", cwd=cwd, prompt=_string(payload, "prompt"))
     if event == "PreToolUse":
         tool_input = payload.get("tool_input")
         if not isinstance(tool_input, dict) or any(not isinstance(key, str) for key in tool_input):
             raise ValueError("tool_input must be a JSON object")
         return HookRequest(
             event="PreToolUse",
+            cwd=cwd,
             tool_name=_string(payload, "tool_name"),
             tool_input=tool_input,
         )
     if event == "Stop":
-        return HookRequest(event="Stop")
+        stop_hook_active = payload.get("stop_hook_active", False)
+        if not isinstance(stop_hook_active, bool):
+            raise ValueError("stop_hook_active must be a boolean")
+        return HookRequest(event="Stop", cwd=cwd, stop_hook_active=stop_hook_active)
     raise ValueError(f"unsupported hook_event_name: {event}")
 
 
@@ -43,9 +48,9 @@ def render_hook_output(request: HookRequest, outcome: HookOutcome) -> dict[str, 
     if request.event == "PreToolUse":
         specific: dict[str, object] = {
             "hookEventName": request.event,
-            "permissionDecision": "allow" if outcome.allowed else "deny",
         }
         if not outcome.allowed:
+            specific["permissionDecision"] = "deny"
             specific["permissionDecisionReason"] = format_violations(outcome.violations)
         return {"hookSpecificOutput": specific}
     if outcome.allowed:
@@ -68,6 +73,8 @@ def handle(
 
 
 def run(translate: Translator, render: Renderer) -> int:
+    exit_code = 0
+    payload: object = None
     try:
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
@@ -80,14 +87,33 @@ def run(translate: Translator, render: Renderer) -> int:
         if isinstance(message, str):
             print(message, file=sys.stderr)
     except (OSError, ValueError, json.JSONDecodeError) as error:
-        output = {"continue": False, "stopReason": f"invalid hook input: {error}"}
+        reason = f"invalid hook input: {error}"
+        if isinstance(payload, dict) and payload.get("hook_event_name") == "PreToolUse":
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        else:
+            output = {}
+            print(reason, file=sys.stderr)
+            exit_code = 2
     json.dump(output, sys.stdout, sort_keys=True)
     sys.stdout.write("\n")
-    return 0
+    return exit_code
 
 
 def _string(payload: Mapping[str, Any], key: str) -> str:
     value = payload.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    return value
+
+
+def _optional_string(payload: Mapping[str, Any], key: str) -> str:
+    value = payload.get(key, "")
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string")
     return value
