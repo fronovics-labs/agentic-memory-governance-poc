@@ -157,8 +157,8 @@ PASS
 
 ## P03 — Memory model and Markdown repository
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -170,9 +170,20 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
+- Files changed: `src/lab/memory/model.py`, `src/lab/memory/repository.py`, `src/lab/cli.py`,
+  `tests/unit/test_memory.py`, `tests/contract/test_memory_repository.py`,
+  `tests/integration/test_memory_cli.py`, and this tracker.
 - Commands executed:
-- Results:
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run lab memory validate --directory /private/tmp/p03-memory-evidence.X97S4J` with one valid memory.
+  - The same validation command after adding `ADR-002` with `supersedes = "MISSING"`.
+- Results: Ruff format `35 files already formatted`; Ruff lint `All checks passed!`; mypy
+  `Success: no issues found in 35 source files`; pytest `18 passed in 1.43s`; the valid corpus
+  exited 0 with `valid: 1 memories`; the invalid-reference corpus exited 1 with `ADR-002:
+  supersedes unknown memory MISSING`.
 
 ### Adversarial review
 
