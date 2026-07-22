@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -18,6 +19,28 @@ _RESERVED_ENVIRONMENT = {
     "CLAUDE_CONFIG_DIR",
     "CODEX_HOME",
     "LAB_GOVERNANCE_MODE",
+}
+_BLOCKED_ARGUMENTS = {
+    "claude": {
+        "--add-dir",
+        "--continue",
+        "--plugin-dir",
+        "--resume",
+        "--setting-sources",
+        "--settings",
+        "-c",
+        "-r",
+    },
+    "codex": {
+        "--cd",
+        "--config",
+        "--disable",
+        "--enable",
+        "--profile",
+        "-C",
+        "-c",
+        "-p",
+    },
 }
 
 
@@ -51,6 +74,7 @@ def build_launch_plan(
         raise ValueError(f"unsupported client: {client}")
     if any(not isinstance(argument, str) or "\0" in argument for argument in arguments):
         raise ValueError("client arguments must be strings without NUL bytes")
+    _validate_client_arguments(client, arguments)
     overrides = dict(environment_overrides or {})
     forbidden = sorted(_RESERVED_ENVIRONMENT & overrides.keys())
     if forbidden:
@@ -101,11 +125,16 @@ def launch_client(plan: LaunchPlan, runner: Runner | None = None) -> int:
     run = verify_run(plan.repository_root, plan.runs_root, plan.run_id)
     if Path(run.worktree) != plan.cwd:
         raise ValueError("launch plan does not match the named run worktree")
-    _validate_plan_paths(plan)
-    _prepare_client_state(plan)
-    exit_code = (runner or _run_subprocess)(plan)
-    if not isinstance(exit_code, int):
-        raise ValueError("client runner must return an integer exit code")
+    _validate_plan(plan, run.mode)
+    _require_fresh_destinations(plan)
+    try:
+        _prepare_client_state(plan)
+        exit_code = (runner or _run_subprocess)(plan)
+        if not isinstance(exit_code, int):
+            raise ValueError("client runner must return an integer exit code")
+    except Exception:
+        _rollback_client_state(plan)
+        raise
     write_json(plan.record_path, _launch_record(plan, exit_code=exit_code))
     return exit_code
 
@@ -155,9 +184,6 @@ def _launch_record(plan: LaunchPlan, *, exit_code: int | None) -> dict[str, obje
 
 
 def _run_subprocess(plan: LaunchPlan) -> int:
-    for path in (plan.stdout_log, plan.stderr_log):
-        if path.exists() or path.is_symlink():
-            raise ValueError(f"client log already exists: {path}")
     with (
         plan.stdout_log.open("x", encoding="utf-8") as stdout,
         plan.stderr_log.open("x", encoding="utf-8") as stderr,
@@ -174,7 +200,7 @@ def _run_subprocess(plan: LaunchPlan) -> int:
     return completed.returncode
 
 
-def _validate_plan_paths(plan: LaunchPlan) -> None:
+def _validate_plan(plan: LaunchPlan, run_mode: str) -> None:
     run_dir = plan.cwd.parent
     clients = safe_directory(run_dir, "artifacts", "clients")
     logs = safe_directory(run_dir, "artifacts", "logs")
@@ -188,11 +214,51 @@ def _validate_plan_paths(plan: LaunchPlan) -> None:
     actual = (plan.client_home, plan.stdout_log, plan.stderr_log, plan.record_path)
     if actual != expected or not plan.argv or plan.argv[0] != plan.client:
         raise ValueError("launch plan paths or executable do not match the named client")
+    _validate_client_arguments(plan.client, plan.argv[1:])
     if plan.environment.get("CLAUDE_CODE_DISABLE_AUTO_MEMORY") != "1":
         raise ValueError("launch plan does not disable Claude native memory")
+    if plan.environment.get("LAB_GOVERNANCE_MODE") != run_mode:
+        raise ValueError("launch plan governance mode does not match the named run")
     home_key = "CLAUDE_CONFIG_DIR" if plan.client == "claude" else "CODEX_HOME"
     if plan.environment.get(home_key) != str(plan.client_home):
         raise ValueError("launch plan does not use its isolated client home")
+    forbidden_home = "CODEX_HOME" if plan.client == "claude" else "CLAUDE_CONFIG_DIR"
+    if forbidden_home in plan.environment:
+        raise ValueError("launch plan contains another client's state directory")
+
+
+def _require_fresh_destinations(plan: LaunchPlan) -> None:
+    client_root = plan.client_home.parent
+    if client_root.exists() or client_root.is_symlink():
+        raise ValueError(f"client state already exists for run: {plan.run_id}/{plan.client}")
+    for path in (plan.stdout_log, plan.stderr_log):
+        if path.exists() or path.is_symlink():
+            raise ValueError(f"client log already exists: {path}")
+
+
+def _rollback_client_state(plan: LaunchPlan) -> None:
+    client_root = plan.client_home.parent
+    if client_root.is_symlink():
+        client_root.unlink()
+    elif client_root.exists():
+        shutil.rmtree(client_root)
+    for path in (plan.stdout_log, plan.stderr_log):
+        if path.exists() or path.is_symlink():
+            path.unlink()
+
+
+def _validate_client_arguments(client: Client, arguments: Sequence[str]) -> None:
+    blocked = _BLOCKED_ARGUMENTS[client]
+    short = {option for option in blocked if option.startswith("-") and not option.startswith("--")}
+    for argument in arguments:
+        if argument == "--":
+            return
+        option = argument.split("=", 1)[0]
+        attached = any(
+            argument.startswith(candidate) and argument != candidate for candidate in short
+        )
+        if option in blocked or attached:
+            raise ValueError(f"client argument can override controlled launch state: {argument}")
 
 
 def _valid_environment(environment: Mapping[str, str]) -> bool:

@@ -654,6 +654,14 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   records expose only controlled environment values. Tests cover two-run home uniqueness, state
   reuse, forged path redirection, symlinked state, modified project hooks, safe environment additions,
   a fake runner, and dry planning without either client installed.
+- Re-review fixes: Codex cwd/config/profile/feature overrides and Claude settings/session/directory
+  overrides reject across short, attached, long, and equals forms while prompt text after `--`
+  remains valid; launch execution revalidates arguments, mode, memory disablement, isolated home,
+  executable, paths, and cross-client state against the fresh run manifest; spawn/runner exceptions
+  remove only the newly created client home, config, record, and partial logs so a clean retry works.
+- Re-review results: focused argument/mode/rollback regressions `2 passed in 8.73s`; Ruff format `44
+  files already formatted`; Ruff lint `All checks passed!`; mypy `Success: no issues found in 44
+  source files`; full pytest `154 passed in 88.15s`; diff check passed.
 
 ### Adversarial review
 

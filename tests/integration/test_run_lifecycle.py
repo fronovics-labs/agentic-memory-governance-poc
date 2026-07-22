@@ -10,7 +10,7 @@ import pytest
 
 from lab.cli import main
 from lab.runs.baseline import default_runs_root, freeze_baseline, verify_baseline
-from lab.runs.launch import LaunchPlan, build_launch_plan, launch_client, public_plan
+from lab.runs.launch import Client, LaunchPlan, build_launch_plan, launch_client, public_plan
 from lab.runs.manifest import RunManifest, read_json, sha256_file
 from lab.runs.workspace import archive_run, create_run, reset_run, verify_run
 
@@ -361,6 +361,79 @@ def test_launch_rejects_symlinked_client_state(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="must not be a symlink"):
         build_launch_plan(root, runs_root, "run-001", "codex", base_environment={})
+
+
+def test_launch_rejects_all_control_plane_argument_forms(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    create_run(root, runs_root, "run-001", "block")
+    cases: list[tuple[Client, tuple[str, ...]]] = [
+        ("codex", ("-C", "/tmp")),
+        ("codex", ("-C/tmp",)),
+        ("codex", ("--cd", "/tmp")),
+        ("codex", ("--cd=/tmp",)),
+        ("codex", ("-c", "features.memories=true")),
+        ("codex", ("-cfeatures.memories=true",)),
+        ("codex", ("--config", "memories.use_memories=true")),
+        ("codex", ("--config=memories.generate_memories=true",)),
+        ("codex", ("--enable", "memories")),
+        ("codex", ("--enable=memories",)),
+        ("codex", ("-p", "unsafe")),
+        ("codex", ("--profile=unsafe",)),
+        ("claude", ("--settings", "/tmp/settings.json")),
+        ("claude", ("--setting-sources=user,project",)),
+        ("claude", ("--add-dir", "/tmp")),
+        ("claude", ("--continue",)),
+    ]
+    for client, arguments in cases:
+        with pytest.raises(ValueError, match="override controlled launch state"):
+            build_launch_plan(
+                root,
+                runs_root,
+                "run-001",
+                client,
+                arguments=arguments,
+                base_environment={},
+            )
+
+    safe = build_launch_plan(
+        root,
+        runs_root,
+        "run-001",
+        "codex",
+        arguments=("--", "describe -C /tmp and -cfeatures.memories=true"),
+        base_environment={},
+    )
+    assert safe.argv[1:] == ("--", "describe -C /tmp and -cfeatures.memories=true")
+
+
+def test_launch_revalidates_mode_arguments_and_rolls_back_spawn_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    create_run(root, runs_root, "run-001", "block")
+    plan = build_launch_plan(root, runs_root, "run-001", "codex", base_environment={})
+
+    downgraded_environment = dict(plan.environment)
+    downgraded_environment["LAB_GOVERNANCE_MODE"] = "audit"
+    with pytest.raises(ValueError, match="governance mode"):
+        launch_client(replace(plan, environment=downgraded_environment), runner=lambda _: 0)
+    with pytest.raises(ValueError, match="override controlled launch state"):
+        launch_client(replace(plan, argv=("codex", "-C", "/tmp")), runner=lambda _: 0)
+
+    def failed_spawn(received: LaunchPlan) -> int:
+        received.stdout_log.write_text("partial stdout\n")
+        received.stderr_log.write_text("partial stderr\n")
+        raise OSError("client executable is unavailable")
+
+    monkeypatch.setattr("lab.runs.launch._run_subprocess", failed_spawn)
+    with pytest.raises(OSError, match="unavailable"):
+        launch_client(plan)
+    assert not plan.client_home.parent.exists()
+    assert not plan.stdout_log.exists() and not plan.stderr_log.exists()
+
+    assert launch_client(plan, runner=lambda _: 0) == 0
 
 
 def test_verify_rejects_untracked_governed_files(tmp_path: Path) -> None:
