@@ -2,12 +2,15 @@
 
 import json
 import subprocess
+import tomllib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from lab.cli import main
 from lab.runs.baseline import default_runs_root, freeze_baseline, verify_baseline
+from lab.runs.launch import LaunchPlan, build_launch_plan, launch_client, public_plan
 from lab.runs.manifest import RunManifest, read_json, sha256_file
 from lab.runs.workspace import archive_run, create_run, reset_run, verify_run
 
@@ -171,6 +174,8 @@ def test_cli_wires_baseline_and_run_lifecycle(
     assert main(["baseline", "verify", "--name", "platform-v1"]) == 0
     assert main(["run", "create", "--id", "run-001", "--mode", "audit"]) == 0
     assert main(["run", "verify", "--id", "run-001"]) == 0
+    assert main(["run", "launch", "--id", "run-001", "--client", "codex", "--dry-run"]) == 0
+    assert not (runs_root / "runs" / "run-001" / "artifacts" / "clients").exists()
     assert main(["run", "reset", "--id", "run-001"]) == 0
     assert main(["run", "archive", "--id", "run-001"]) == 0
     assert (runs_root / "runs" / "run-001" / "run.json").is_file()
@@ -205,6 +210,157 @@ def test_artifact_symlink_cannot_redirect_reset_patch(tmp_path: Path) -> None:
         reset_run(root, runs_root, "run-001")
     assert worktree.is_dir()
     assert list(outside.iterdir()) == []
+
+
+def test_launch_plans_use_named_worktree_and_sanitize_inherited_memory(
+    tmp_path: Path,
+) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    claude_worktree = create_run(root, runs_root, "run-claude", "audit")
+    codex_worktree = create_run(root, runs_root, "run-codex", "block")
+    inherited = {
+        "PATH": "/bin",
+        "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "0",
+        "CLAUDE_CONFIG_DIR": "/tmp/inherited-claude",
+        "CODEX_HOME": "/tmp/inherited-codex",
+        "LAB_GOVERNANCE_MODE": "audit",
+    }
+
+    claude = build_launch_plan(
+        root,
+        runs_root,
+        "run-claude",
+        "claude",
+        arguments=("--print",),
+        base_environment=inherited,
+    )
+    codex = build_launch_plan(
+        root,
+        runs_root,
+        "run-codex",
+        "codex",
+        base_environment=inherited,
+    )
+
+    assert claude.cwd == claude_worktree and claude.argv == ("claude", "--print")
+    assert claude.environment["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    assert claude.environment["CLAUDE_CONFIG_DIR"] == str(claude.client_home)
+    assert "CODEX_HOME" not in claude.environment
+    assert codex.cwd == codex_worktree and codex.argv == ("codex",)
+    assert codex.environment["CODEX_HOME"] == str(codex.client_home)
+    assert "CLAUDE_CONFIG_DIR" not in codex.environment
+    assert codex.environment["LAB_GOVERNANCE_MODE"] == "block"
+    assert "PATH" not in str(public_plan(codex))
+    assert claude.client_home != codex.client_home
+    for path in (claude.client_home, codex.client_home):
+        assert not path.exists()
+        assert not path.is_relative_to(root)
+        assert not path.is_relative_to(claude_worktree)
+
+
+def test_codex_launch_creates_fresh_memory_disabled_home_and_external_record(
+    tmp_path: Path,
+) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "block")
+    plan = build_launch_plan(root, runs_root, "run-001", "codex", base_environment={})
+    observed = []
+
+    with pytest.raises(ValueError, match="paths or executable"):
+        launch_client(replace(plan, client_home=tmp_path / "redirected-home"), runner=lambda _: 0)
+
+    def fake_runner(received: LaunchPlan) -> int:
+        observed.append(received)
+        config = tomllib.loads((plan.client_home / "config.toml").read_text())
+        assert config["features"]["memories"] is False
+        assert config["memories"] == {"use_memories": False, "generate_memories": False}
+        assert config["projects"][str(worktree)]["trust_level"] == "trusted"
+        assert plan.record_path.is_file()
+        return 0
+
+    assert launch_client(plan, runner=fake_runner) == 0
+    assert observed == [plan]
+    assert plan.record_path.is_file()
+    assert not plan.record_path.is_relative_to(root)
+    with pytest.raises(ValueError, match="client state already exists"):
+        launch_client(plan, runner=fake_runner)
+
+
+def test_client_homes_are_unique_across_runs(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    create_run(root, runs_root, "run-001", "audit")
+    create_run(root, runs_root, "run-002", "audit")
+    first = build_launch_plan(root, runs_root, "run-001", "codex", base_environment={})
+    second = build_launch_plan(root, runs_root, "run-002", "codex", base_environment={})
+
+    assert first.client_home != second.client_home
+    assert launch_client(first, runner=lambda _: 0) == 0
+    assert launch_client(second, runner=lambda _: 0) == 0
+    assert first.client_home.is_dir() and second.client_home.is_dir()
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "CLAUDE_CODE_DISABLE_AUTO_MEMORY",
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "LAB_GOVERNANCE_MODE",
+    ],
+)
+def test_launch_rejects_controlled_environment_overrides(key: str, tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    create_run(root, runs_root, "run-001", "audit")
+
+    with pytest.raises(ValueError, match="cannot be overridden"):
+        build_launch_plan(
+            root,
+            runs_root,
+            "run-001",
+            "claude",
+            base_environment={},
+            environment_overrides={key: "unsafe"},
+        )
+
+
+def test_launch_allows_safe_environment_and_rejects_modified_project_hooks(
+    tmp_path: Path,
+) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    plan = build_launch_plan(
+        root,
+        runs_root,
+        "run-001",
+        "claude",
+        base_environment={"PATH": "/bin"},
+        environment_overrides={"TERM": "xterm-256color"},
+    )
+    assert plan.environment["PATH"] == "/bin"
+    assert plan.environment["TERM"] == "xterm-256color"
+
+    (worktree / ".claude" / "settings.json").write_text('{"hooks": {}}\n')
+    with pytest.raises(ValueError, match="does not match"):
+        build_launch_plan(root, runs_root, "run-001", "claude", base_environment={})
+
+
+def test_launch_rejects_symlinked_client_state(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    clients = worktree.parent / "artifacts" / "clients"
+    clients.mkdir()
+    outside = tmp_path / "outside-client-state"
+    outside.mkdir()
+    (clients / "codex").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        build_launch_plan(root, runs_root, "run-001", "codex", base_environment={})
 
 
 def test_verify_rejects_untracked_governed_files(tmp_path: Path) -> None:

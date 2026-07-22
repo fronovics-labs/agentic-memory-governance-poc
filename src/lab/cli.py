@@ -1,12 +1,14 @@
 """Top-level lab command; feature commands are added by their owning tasks."""
 
+import json
 import sys
-from argparse import ArgumentParser
+from argparse import REMAINDER, ArgumentParser
 from collections.abc import Sequence
 from lab.memory.renderer import render_context
 from lab.memory.repository import MarkdownMemoryRepository
 from lab.memory.retrieval import search_memories
 from lab.runs.baseline import default_runs_root, freeze_baseline, repository_root, verify_baseline
+from lab.runs.launch import build_launch_plan, launch_client, public_plan
 from lab.runs.workspace import archive_run, create_run, reset_run, verify_run
 
 
@@ -39,6 +41,11 @@ def build_parser() -> ArgumentParser:
     for command in ("reset", "verify", "archive"):
         run_command = run_commands.add_parser(command)
         run_command.add_argument("--id", required=True)
+    launch = run_commands.add_parser("launch")
+    launch.add_argument("--id", required=True)
+    launch.add_argument("--client", choices=("claude", "codex"), required=True)
+    launch.add_argument("--dry-run", action="store_true")
+    launch.add_argument("client_args", nargs=REMAINDER)
     return parser
 
 
@@ -58,6 +65,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
 
             run_id = args.id
+            if args.run_command == "launch":
+                plan = build_launch_plan(
+                    root,
+                    runs_root,
+                    run_id,
+                    args.client,
+                    arguments=args.client_args,
+                )
+                if args.dry_run:
+                    print(json.dumps(public_plan(plan), indent=2, sort_keys=True))
+                    return 0
+                return launch_client(plan)
             if args.run_command == "create":
                 created = create_run(root, runs_root, run_id, args.mode)
                 print(created)

@@ -627,8 +627,8 @@ PASS
 
 ## P08 — Client launch isolation
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -640,9 +640,20 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
-- Commands executed:
-- Results:
+- Files changed: `src/lab/runs/launch.py`, `src/lab/cli.py`,
+  `tests/integration/test_run_lifecycle.py`, and this tracker.
+- Commands executed: official Codex memory/config documentation lookup; Ruff format/check; mypy;
+  focused launch-isolation pytest; full pytest; CLI dry-run coverage; `git diff --check`.
+- Results: Ruff format `44 files already formatted`; Ruff lint `All checks passed!`; mypy `Success:
+  no issues found in 44 source files`; focused launch isolation `9 passed, 13 deselected in 34.61s`;
+  full pytest `152 passed in 85.02s`; diff check passed.
+- Coverage: plans pin cwd to the verified named detached worktree and pass argv without a shell;
+  reserved inherited memory/home/mode values are removed and caller overrides reject; Claude gets
+  auto-memory disabled plus a fresh external config directory; Codex gets a unique external home
+  with memory feature/use/generation disabled and only the verified project trusted; external launch
+  records expose only controlled environment values. Tests cover two-run home uniqueness, state
+  reuse, forged path redirection, symlinked state, modified project hooks, safe environment additions,
+  a fake runner, and dry planning without either client installed.
 
 ### Adversarial review
 
