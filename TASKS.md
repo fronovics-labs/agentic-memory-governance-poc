@@ -170,11 +170,28 @@ Round 2 status: READY_FOR_REVIEW
 
 #### Follow-up round 2 review
 
-PENDING — an independent reviewer must inspect the round-2 documentation fix.
+- Clean checkout: detached reviewer worktree at
+  `32baed86916220cfe812d5e1e37364f24017b6fa`; clean before review.
+- Diff inspected: the complete focused delta from rejected commit
+  `81a5d204a8c8399658d8dacdd2aeca62253fcd73` changes only `README.md` and this
+  follow-up record. The README moves archive after both launch sections and documents the
+  archived run as terminal evidence.
+- Corrected lifecycle replay: baseline freeze and verify, run create and verify, reset, Codex
+  dry-run, Claude dry-run, and archive all exited 0 in that order. Both launch plans used the
+  active run's detached worktree and external client homes.
+- Terminal-state counterexamples: after archive, verify, reset, and Codex dry-run launch each
+  exited 1 with `run is not active: run-001`. The original archive-before-launch false rejection
+  is resolved while inactive-run operations remain rejected.
+- README sanity: 20 shell commands found, both local references resolved, all 22 fences balanced,
+  lifecycle order inspected, and `git diff --check` passed.
+- Required gates: `uv run ruff check .` returned `All checks passed!`; `uv run mypy` returned
+  `Success: no issues found in 45 source files`; `uv run pytest` returned `156 passed in 164.22s`.
+- Finding disposition: the original command-order defect is fixed. No new command, reference,
+  scope, or behavior inconsistency was found in the focused documentation delta.
 
 #### Follow-up round 2 verdict
 
-PENDING
+PASS
 
 ## P02 — Synthetic order service
 
