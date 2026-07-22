@@ -150,6 +150,32 @@ Follow-up implementer commit: HEAD (resolved to the commit supplied for review)
 
 CHANGES_REQUESTED
 
+#### Follow-up round 2 implementer evidence
+
+Round 2 status: READY_FOR_REVIEW
+
+- Fixed only the README lifecycle sequence: run management now creates, verifies, and resets the
+  active run; both launch sections precede archive; archive is the final cleanup step; and the
+  guide states that archived runs cannot be verified, reset, or launched.
+- Replayed the top-to-bottom non-real-client lifecycle in a fresh clean clone: baseline freeze and
+  verify, run create and verify, reset, Codex dry-run, Claude dry-run, and archive all exited 0.
+- After archive, verify, reset, and dry-run launch each exited 1 with `run is not active: run-001`,
+  confirming the documented terminal state.
+- Proportionate checks: Ruff returned `All checks passed!`; mypy returned `Success: no issues
+  found in 45 source files`; the focused run-lifecycle suite returned `24 passed in 111.24s`.
+- README sanity returned `20 shell commands parsed, 2 local references resolved, lifecycle order
+  valid, code fences balanced`; `git diff --check` exited 0.
+- Files changed in the round-2 fix: `README.md` and this evidence record in `TASKS.md`; no
+  production code changed.
+
+#### Follow-up round 2 review
+
+PENDING — an independent reviewer must inspect the round-2 documentation fix.
+
+#### Follow-up round 2 verdict
+
+PENDING
+
 ## P02 — Synthetic order service
 
 Status: READY_FOR_REVIEW

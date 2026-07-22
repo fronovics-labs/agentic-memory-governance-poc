@@ -107,14 +107,12 @@ governance configuration, and platform files. It also records the Python and hos
 ## Manage isolated runs
 
 Run creation uses the active baseline and creates a named detached worktree. Verification checks
-that identity and configuration; reset captures a patch before recreating the worktree; archive
-captures the final patch and removes the worktree.
+that identity and configuration; reset captures a patch before recreating the worktree.
 
 ```bash
 uv run lab run create --id run-001 --mode block
 uv run lab run verify --id run-001
 uv run lab run reset --id run-001
-uv run lab run archive --id run-001
 ```
 
 Mutable artifacts never live in the source repository. For a repository named `<repo>`, they are
@@ -152,6 +150,15 @@ project hooks and the run's governance mode. Claude gets a fresh external `CLAUD
 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Codex gets a fresh external `CODEX_HOME` whose configuration
 disables native memories and trusts only the run project. Reserved environment, working-directory,
 profile, config, and memory overrides are rejected; per-run client state is not reused.
+
+After dry-run inspection or a real client session, archive the run as the final cleanup step. This
+captures its final patch and removes its detached worktree:
+
+```bash
+uv run lab run archive --id run-001
+```
+
+An archived run is final evidence and cannot be verified, reset, or launched again.
 
 ## Project map
 
