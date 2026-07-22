@@ -538,8 +538,8 @@ PASS
 
 ## P07 — Baseline, worktree and reset lifecycle
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -551,9 +551,21 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
-- Commands executed:
-- Results:
+- Files changed: `src/lab/runs/manifest.py`, `src/lab/runs/baseline.py`,
+  `src/lab/runs/workspace.py`, `src/lab/cli.py`,
+  `tests/integration/test_run_lifecycle.py`, and this tracker.
+- Commands executed: Ruff format/check, mypy, full pytest, focused disposable-repository lifecycle
+  tests, direct CLI lifecycle test with visible output, and `git diff --check`.
+- Results: Ruff format `43 files already formatted`; Ruff lint `All checks passed!`; mypy `Success:
+  no issues found in 43 source files`; full pytest `138 passed in 15.16s`; focused lifecycle `8
+  passed in 11.02s`; direct CLI freeze/verify/create/verify/reset/archive `1 passed in 2.65s` with
+  baseline, worktree, manifest, and patch paths in the external sibling runs directory.
+- Coverage: manifests record commit/tree, dependency lock, tracked memory/hook/governance/platform
+  hashes, Python, and host platform; freeze rejects dirty state; run creation is detached; verify
+  detects protected-file changes; three resets reproduce identical commit/content while retaining
+  logs, transcripts, and prior patches; unrelated worktrees survive; baseline and run-manifest
+  tampering fail before deletion; archive captures the final patch externally; unsafe IDs, symlinked
+  roots/artifact paths, and redirected worktree paths fail closed.
 
 ### Adversarial review
 
