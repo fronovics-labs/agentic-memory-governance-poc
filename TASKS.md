@@ -42,16 +42,28 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `15326a87abf44c81a462e93971649cd20d8d9700`; clean before review.
+- Diff inspected: complete 43-file diff against `5893370babc84928a6a9615e3656118b6b47acc7`.
+- Counterexamples: an independent AST boundary gate rejected a synthetic
+  `domain -> infrastructure` import and accepted the valid
+  `infrastructure -> application/domain` direction; all current scaffold imports passed. Package
+  imports also succeeded from `/private/tmp`, outside the repository working directory.
+- SOLID findings: `ARCHITECTURE.md` does not assign a responsibility or owner to the platform CLI
+  surface (`scripts/lab`, `src/lab/cli.py`, and `src/lab/__main__.py`). The sample-app CLI has an
+  explicit row, so ownership of the platform entrypoint is ambiguous and the second acceptance
+  criterion is not met. No production abstraction, concrete-check coupling, or forbidden
+  dependency exists yet.
+- DRY findings: no duplicated business or hook logic; P02-P09 modules are inert placeholders.
+- Commands executed: `uv sync --frozen --dev`; `uv run python --version` (`3.12.13`);
+  `uv run ruff format --check .` (`26 files already formatted`); `uv run ruff check .` (passed);
+  `uv run mypy` (26 files, passed); `uv run pytest -q` (1 passed); `scripts/lab --help` (passed);
+  independent JSON/TOML/diff, required-path, package-import, external-CWD import, scope, and AST
+  boundary checks (passed).
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P02 — Synthetic order service
 
