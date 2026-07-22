@@ -127,11 +127,28 @@ Follow-up implementer commit: HEAD (resolved to the commit supplied for review)
 
 #### Follow-up review
 
-PENDING — an independent reviewer must inspect this documentation-only follow-up.
+- Clean checkout: detached reviewer worktree at
+  `81a5d204a8c8399658d8dacdd2aeca62253fcd73`; clean before review.
+- Diff inspected: complete documentation-only delta from the previously reviewed
+  `dd9ce9975c706e116f846032ea567a7ae6514618` changed only `README.md` and this P01
+  follow-up record.
+- Commands checked: locked setup, Ruff, and mypy passed. The documented baseline freeze and
+  verify, run create and verify, reset, and archive commands also passed from a clean checkout.
+  The implementer evidence above records the CLI help matrix, Markdown references and fences,
+  and `git diff --check` as passing; this review found no separate defect in those checks.
+- Counterexample: following `README.md` from top to bottom archives `run-001` in "Manage isolated
+  runs" before the later "Launch Claude Code or Codex" commands reuse that ID. Both documented
+  dry-run launch commands then exited 1 with `run is not active: run-001`; real launches must
+  verify the same active-run precondition and therefore cannot proceed either. A dry run does not
+  require either client binary, so this is a guide-order defect rather than an environment issue.
+- Finding: move the dry-run launch demonstration before reset/archive, create a fresh active run
+  for the launch section, or otherwise make the documented sequence executable as written. The
+  current README does not satisfy the acceptance criterion that documented commands agree with
+  repository behavior.
 
 #### Follow-up verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P02 — Synthetic order service
 
