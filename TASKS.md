@@ -713,8 +713,8 @@ PASS
 
 ## P09 — End-to-end canary
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -727,9 +727,20 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
-- Commands executed:
-- Results:
+- Files changed: `tests/adversarial/test_platform_canary.py` and this tracker. No production
+  experiment task, seeded architecture violation, metric, result, or conclusion was added.
+- Commands executed: focused adversarial canary pytest; Ruff format/check; mypy; full pytest; `git
+  diff --check`.
+- Results: focused canary `2 passed in 18.83s`; Ruff format `45 files already formatted`; Ruff lint
+  `All checks passed!`; mypy `Success: no issues found in 45 source files`; full pytest `156 passed
+  in 104.80s`; diff check passed.
+- Coverage: a disposable clean Git baseline runs the frozen SQLite order CLI and validates governed
+  Markdown memory; Claude and Codex render identical ID/authority/content context; an injection asking
+  to ignore policy, edit hooks, and reset Git remains denied by both adapters; a test-only temporary
+  check logs/allows in audit, blocks in block, and then allows when resolved; fake launches verify
+  Claude/Codex memory isolation and separate Codex homes; three resets reproduce identical
+  commit/tree/manifest hashes; archive retains reset/final patches, transcript, log, launch records,
+  and the isolated memory marker. A separate gate requires independent `PASS` verdicts for P01-P08.
 
 ### Adversarial review
 
