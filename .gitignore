@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project hook configuration is part of the governed platform.
+!.claude/
+!.claude/settings.json
