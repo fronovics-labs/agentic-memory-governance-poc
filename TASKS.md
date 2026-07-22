@@ -248,8 +248,8 @@ PASS
 
 ## P04 — Retrieval and context rendering
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -261,9 +261,21 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
+- Files changed: `src/lab/memory/retrieval.py`, `src/lab/memory/renderer.py`, `src/lab/cli.py`,
+  `tests/unit/test_retrieval.py`, `tests/integration/test_memory_retrieval_cli.py`, and this tracker.
 - Commands executed:
-- Results:
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run lab memory search --query 'order persistence' --directory /private/tmp/p04-memory-evidence.s1cLig`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run lab memory context --prompt 'change order persistence' --path sample_app/application/orders.py --directory /private/tmp/p04-memory-evidence.s1cLig`
+  - The same context command with path `sample_app/infrastructure/sqlite_orders.py`.
+- Results: Ruff format `37 files already formatted`; Ruff lint `All checks passed!`; mypy
+  `Success: no issues found in 37 source files`; pytest `29 passed in 2.28s`; search returned active
+  `ADR-001` then `ADR-003` with IDs and authority, excluding inactive `ADR-002`; application
+  context returned only scoped `ADR-001`; the wrong-path context returned no output; all direct
+  commands exited 0.
 
 ### Adversarial review
 
