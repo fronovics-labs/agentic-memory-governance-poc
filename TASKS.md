@@ -7,6 +7,7 @@ An implementer sets `READY_FOR_REVIEW`; only an independent reviewer sets `PASS`
 
 Status: READY_FOR_REVIEW
 Implementer commit: HEAD (resolved to the commit supplied for review)
+Review round: 2
 
 ### Acceptance criteria
 
@@ -39,6 +40,17 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   `26 files already formatted`; Ruff lint `All checks passed!`; mypy
   `Success: no issues found in 26 source files`; pytest `1 passed in 0.02s`; `lab --help` exited 0
   with the expected `usage: lab [-h]`; both hook JSON files parsed; diff check exited 0.
+- Re-review fix: assigned the platform CLI surface (`scripts/lab`, `src/lab/cli.py`, and
+  `src/lab/__main__.py`) an explicit responsibility and `Platform integration` owner in
+  `ARCHITECTURE.md`.
+- Re-review commands: `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format
+  --check .`; `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache scripts/lab --help`; `git diff --check`.
+- Re-review results: Ruff format `26 files already formatted`; Ruff lint `All checks passed!`;
+  mypy `Success: no issues found in 26 source files`; pytest `1 passed in 0.02s`; `lab --help`
+  exited 0 with `usage: lab [-h]`; diff check exited 0.
 
 ### Adversarial review
 

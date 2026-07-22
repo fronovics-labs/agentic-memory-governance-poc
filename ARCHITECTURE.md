@@ -16,6 +16,7 @@ violations, measurements, or conclusions.
 | `src/lab/hooks/core.py` | Client-neutral hook behavior | Governance |
 | `src/lab/hooks/*_adapter.py` | JSON translation only; no retrieval or governance rules | Client integration |
 | `src/lab/runs/` | Frozen baselines, external run worktrees, manifests, reset, and isolation | Run control |
+| `scripts/lab`, `src/lab/cli.py`, `src/lab/__main__.py` | Platform command bootstrap and subcommand composition; delegates behavior to owning modules | Platform integration |
 | `.org-memory/items/` | Governed Markdown memory records | Architecture |
 | `.claude/`, `.codex/` | Thin client hook configuration | Client integration |
 | `agents/` | Implementer and independent reviewer operating contracts | Architecture |
