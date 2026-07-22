@@ -657,16 +657,37 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `4b4df3a6eeec7081266428319a7c7510696c2638`; clean before review.
+- Diff inspected: complete four-file P08 delta from the accepted P07 review, covering launch-plan
+  construction/execution, CLI composition, disposable-run tests, and tracker. No P09 canary,
+  experiment task, seeded failure, metric, or result was added.
+- Counterexamples: a verified block run accepts Codex arguments `-C /tmp -c
+  features.memories=true`, allowing the client to replace both the verified working root and the
+  memory-disabled config. A forged/stale plan for the same block run passes launch-time verification
+  with `LAB_GOVERNANCE_MODE=audit`, and the fake runner receives audit mode. A runner `OSError` occurs
+  after the Claude client directory is created; the next clean attempt is rejected because that state
+  already exists. Existing two-run uniqueness, inherited-env sanitation, project-hook verification,
+  symlink/redirection rejection, and permission-neutral fake-runner controls pass.
+- SOLID findings: launch planning/execution has one run-control owner and the CLI only composes it;
+  subprocess execution uses fixed argv, explicit cwd/env, and no shell. However, invariants are
+  enforced only while building a mutable public `LaunchPlan`, not completely at the execution
+  boundary, and state preparation is not recoverable when execution fails.
+- DRY findings: reserved environment keys, path derivation, state preparation, launch records, and
+  subprocess execution are centralized. Both clients share the same missing launch-time mode/argument
+  validation and failure cleanup rather than duplicating policy.
+- Defects: unrestricted client arguments can override Codex cwd and memory configuration, defeating
+  the two primary isolation guarantees. `launch_client` re-verifies the run path but does not require
+  the plan's `LAB_GOVERNANCE_MODE` to equal the current run mode, so block governance can be downgraded
+  to audit after planning. Finally, client state is created before runner success and is not rolled
+  back on spawn/runner failure, permanently false-rejecting a retry for an otherwise clean run.
+- Commands executed: focused launch-isolation pytest, Ruff format check, Ruff lint, mypy, full pytest,
+  full P08 diff inspection, diff check, local Codex CLI option inspection, and a disposable-run direct
+  launch probe. Standard/focused gates passed; the direct probe reproduced all three defects.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P09 — End-to-end canary
 
