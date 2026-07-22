@@ -21,7 +21,7 @@ def build_parser() -> ArgumentParser:
     search.add_argument("--directory", default=".org-memory/items")
     context = memory_commands.add_parser("context")
     context.add_argument("--prompt", required=True)
-    context.add_argument("--path")
+    context.add_argument("--path", required=True)
     context.add_argument("--directory", default=".org-memory/items")
     return parser
 

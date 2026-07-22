@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import date
 
+import pytest
+
 from lab.memory.model import Memory
 from lab.memory.renderer import render_context
 from lab.memory.retrieval import search_memories
@@ -107,6 +109,28 @@ def test_scope_globs_respect_segment_boundaries_and_recursive_wildcards() -> Non
     assert search(one_segment, recursive, middle_recursive, path=nested) == ["MIDDLE", "RECURSIVE"]
     assert search(one_segment, path="sample_app/application/orders.py") == ["ONE"]
     assert search(recursive, path="sample_app/app/orders.py") == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        "/sample_app/application/orders.py",
+        "sample_app/application/../domain/order.py",
+        "sample_app/./application/orders.py",
+        "sample_app//application/orders.py",
+        "sample_app/application/",
+        r"sample_app\application\orders.py",
+        "C:/sample_app/application/orders.py",
+    ],
+)
+def test_retrieval_rejects_unsafe_or_ambiguous_target_paths(path: str) -> None:
+    with pytest.raises(ValueError, match="normalized relative POSIX path"):
+        search_memories(Memories(memory("ADR-001")), "order", path=path, today=TODAY)
+
+
+def test_retrieval_accepts_normalized_relative_target_path() -> None:
+    assert search(memory("ADR-001"), path="sample_app/application/orders.py") == ["ADR-001"]
 
 
 def test_renderer_is_concise_and_stable() -> None:

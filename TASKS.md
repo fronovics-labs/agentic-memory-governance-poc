@@ -250,6 +250,7 @@ PASS
 
 Status: READY_FOR_REVIEW
 Implementer commit: HEAD (resolved to the commit supplied for review)
+Review round: 2
 
 ### Acceptance criteria
 
@@ -276,6 +277,22 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   `ADR-001` then `ADR-003` with IDs and authority, excluding inactive `ADR-002`; application
   context returned only scoped `ADR-001`; the wrong-path context returned no output; all direct
   commands exited 0.
+- Re-review fix: `context --path` is required, and retrieval rejects absolute, dot-segment,
+  traversal, empty/repeated-separator, trailing-separator, backslash, and Windows-drive target paths
+  before loading or scope matching.
+- Re-review regressions: parameterized unit counterexamples cover each rejected form; integration
+  checks cover missing and traversal CLI paths; normalized relative application paths remain an
+  explicit false-rejection control.
+- Re-review commands: `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check
+  .`; `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`; three direct `lab memory
+  context` commands with missing, traversal, and valid paths; `git diff --check`.
+- Re-review results: Ruff format `37 files already formatted`; Ruff lint `All checks passed!`;
+  mypy `Success: no issues found in 37 source files`; pytest `39 passed in 8.15s`; missing path
+  exited 2 with `the following arguments are required: --path`; traversal exited 1 with
+  `target path must be a normalized relative POSIX path`; valid application path exited 0 and
+  rendered only `[ADR-001 | mandatory]` context.
 
 ### Adversarial review
 

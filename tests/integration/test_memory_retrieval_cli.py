@@ -76,3 +76,63 @@ def test_search_and_context_commands_filter_rank_and_render(tmp_path: Path) -> N
         "[ADR-001 | mandatory] Use repository interfaces for order persistence.\n"
     )
     assert wrong_path.stdout == ""
+
+
+def test_context_requires_safe_explicit_path(tmp_path: Path) -> None:
+    repository = MarkdownMemoryRepository(tmp_path)
+    repository.save(
+        Memory(
+            id="ADR-001",
+            type="architecture_decision",
+            authority="mandatory",
+            status="active",
+            scopes=["sample_app/application/**"],
+            owner="architecture",
+            source_ids=[],
+            enforcement_ids=[],
+            valid_from="",
+            valid_until="",
+            supersedes="",
+            body="Application order policy.",
+        )
+    )
+
+    missing = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "lab",
+            "memory",
+            "context",
+            "--prompt",
+            "order policy",
+            "--directory",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    traversal = run_lab(
+        tmp_path,
+        "context",
+        "--prompt",
+        "order policy",
+        "--path",
+        "sample_app/application/../domain/order.py",
+    )
+    valid = run_lab(
+        tmp_path,
+        "context",
+        "--prompt",
+        "order policy",
+        "--path",
+        "sample_app/application/orders.py",
+    )
+
+    assert missing.returncode == 2
+    assert "the following arguments are required: --path" in missing.stderr
+    assert traversal.returncode == 1
+    assert "target path must be a normalized relative POSIX path" in traversal.stderr
+    assert valid.returncode == 0
+    assert valid.stdout == "[ADR-001 | mandatory] Application order policy.\n"

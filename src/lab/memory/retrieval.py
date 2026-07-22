@@ -23,6 +23,8 @@ def search_memories(
     path: str | None = None,
     today: date | None = None,
 ) -> list[Memory]:
+    if path is not None:
+        _validate_target_path(path)
     query_terms = _terms(query)
     if not query_terms:
         return []
@@ -68,6 +70,18 @@ def _applies_to_path(memory: Memory, path: str | None) -> bool:
         or not memory.scopes
         or any(_path_matches(path, scope) for scope in memory.scopes)
     )
+
+
+def _validate_target_path(path: str) -> None:
+    parts = path.split("/")
+    if (
+        not path
+        or path.startswith("/")
+        or "\\" in path
+        or any(part in {"", ".", ".."} for part in parts)
+        or re.fullmatch(r"[A-Za-z]:", parts[0])
+    ):
+        raise ValueError(f"target path must be a normalized relative POSIX path: {path!r}")
 
 
 def _path_matches(path: str, pattern: str) -> bool:
