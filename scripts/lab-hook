@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Run one of the committed lifecycle-hook adapters."""
+
+import sys
+
+from lab.hooks import claude_adapter, codex_adapter
+
+
+def main() -> int:
+    if len(sys.argv) != 2 or sys.argv[1] not in ("claude", "codex"):
+        print("usage: lab-hook {claude|codex}", file=sys.stderr)
+        return 2
+    return claude_adapter.main() if sys.argv[1] == "claude" else codex_adapter.main()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

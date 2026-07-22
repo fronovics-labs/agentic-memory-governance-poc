@@ -447,8 +447,8 @@ PASS
 
 ## P06 — Claude and Codex adapters
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -460,9 +460,21 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
-- Commands executed:
-- Results:
+- Files changed: `src/lab/hooks/core.py`, `src/lab/hooks/_adapter.py`,
+  `src/lab/hooks/claude_adapter.py`, `src/lab/hooks/codex_adapter.py`, `scripts/lab-hook`,
+  `.claude/settings.json`, `.codex/hooks.json`, `tests/contract/test_hook_adapters.py`, and this
+  tracker.
+- Commands executed: Ruff format/check, mypy, full pytest, focused hook contracts, JSON parsing for
+  both committed config files, and direct JSON stdin invocations of both executable adapters.
+- Results: Ruff format `42 files already formatted`; Ruff lint `All checks passed!`; mypy `Success:
+  no issues found in 42 source files`; full pytest `114 passed in 1.81s`; focused hook contracts `53
+  passed in 0.27s`; both config files parsed; direct Claude protected-write and Codex destructive
+  baseline requests returned structured `PreToolUse` denials.
+- Contract coverage: both clients receive byte-equivalent rendered memory provenance; exact protected
+  paths, patch targets, redirects, and indirect script writes deny; reset/freeze commands including
+  wrappers deny; adjacent reads, verification, quoted text, and lookalike paths allow; audit Stop logs
+  violations while allowing, block Stop returns continuation reasons; malformed JSON-domain inputs
+  fail identically at both adapter boundaries.
 
 ### Adversarial review
 
