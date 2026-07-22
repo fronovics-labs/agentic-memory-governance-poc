@@ -343,6 +343,7 @@ PASS
 
 Status: READY_FOR_REVIEW
 Implementer commit: HEAD (resolved to the commit supplied for review)
+Review round: 2
 
 ### Acceptance criteria
 
@@ -370,6 +371,26 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   `Success: no issues found in 40 source files`; pytest `46 passed in 1.91s`; focused governance
   tests `7 passed in 0.04s`; direct evaluation returned `audit` allowed with all 5 violations and
   `block` rejected with the same 5 violations.
+- Re-review fix: completion governance now executes four fixed argv tuples through shell-free
+  `subprocess.run` with configured cwd/timeout, captured bounded output, and all-command failure
+  aggregation. Repository paths are canonicalized before checks and protected surfaces match only
+  at the repository root. The engine validates safe unique IDs, list/`Violation` outputs, and
+  normalizes every returned violation to its registered check ID.
+- Re-review regressions: tests cover nonzero, timeout, `OSError`, runner exceptions/mismatch,
+  bounded output, all-run behavior, exact argv/cwd/timeout, unsafe paths, safe vendor/copy
+  lookalikes, blank/unsafe/duplicate check IDs, malformed outputs, later-check survival, and spoofed
+  IDs.
+- Re-review commands: `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check
+  .`; `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`;
+  `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest
+  tests/unit/test_governance_checks.py tests/contract/test_governance_engine.py -q`; direct production
+  `CompletionCommandsCheck` evaluation in the implementation worktree; `git diff --check`.
+- Re-review results: Ruff format `40 files already formatted`; Ruff lint `All checks passed!`;
+  mypy `Success: no issues found in 40 source files`; pytest `61 passed in 1.83s`; focused governance
+  tests `22 passed in 0.07s`; the production default runner executed Ruff format/lint, mypy, and
+  pytest and returned `violations=0`.
 
 ### Adversarial review
 

@@ -1,9 +1,18 @@
 """Checks that protect the experimental platform itself."""
 
-import posixpath
-from pathlib import PurePosixPath
+import shlex
+import subprocess
+from collections.abc import Callable
 
 from lab.governance.model import CheckContext, CommandResult, Violation
+
+Runner = Callable[[tuple[str, ...], str, float, int], CommandResult]
+REQUIRED_COMMANDS = (
+    ("uv", "run", "ruff", "format", "--check", "."),
+    ("uv", "run", "ruff", "check", "."),
+    ("uv", "run", "mypy"),
+    ("uv", "run", "pytest", "-q"),
+)
 
 
 class ProtectedPathsCheck:
@@ -38,6 +47,19 @@ class BaselineManifestCheck:
 
 
 class CompletionCommandsCheck:
+    def __init__(
+        self,
+        runner: Runner | None = None,
+        *,
+        timeout_seconds: float = 120,
+        output_limit: int = 4000,
+    ) -> None:
+        if timeout_seconds <= 0 or output_limit <= 0:
+            raise ValueError("timeout and output limit must be positive")
+        self._runner = runner or _run_command
+        self._timeout_seconds = timeout_seconds
+        self._output_limit = output_limit
+
     @property
     def id(self) -> str:
         return "platform.completion_commands"
@@ -45,51 +67,95 @@ class CompletionCommandsCheck:
     def evaluate(self, context: CheckContext) -> list[Violation]:
         if context.phase != "completion":
             return []
-        passed = {
-            name
-            for result in context.commands
-            if result.exit_code == 0
-            for name in [_completed_check(result)]
-            if name is not None
-        }
-        return [
-            Violation(self.id, f"required completion check did not pass: {name}")
-            for name in ("ruff format", "ruff check", "mypy", "pytest")
-            if name not in passed
-        ]
+        violations: list[Violation] = []
+        for command in REQUIRED_COMMANDS:
+            try:
+                result = self._runner(
+                    command,
+                    context.cwd,
+                    self._timeout_seconds,
+                    self._output_limit,
+                )
+                if result.command != command:
+                    raise ValueError("runner returned a result for a different command")
+            except Exception as error:
+                violations.append(
+                    Violation(
+                        self.id,
+                        f"completion command could not run: {shlex.join(command)}: "
+                        f"{type(error).__name__}: {error}",
+                    )
+                )
+                continue
+            if result.exit_code != 0 or result.error:
+                details = result.error or f"exit code {result.exit_code}"
+                output = _result_output(result, self._output_limit)
+                violations.append(
+                    Violation(
+                        self.id,
+                        f"completion command failed: {shlex.join(command)}: {details}{output}",
+                    )
+                )
+        return violations
 
 
 def _is_protected(path: str) -> bool:
-    parts = _parts(path)
+    parts = tuple(path.split("/"))
     return (
-        ".org-memory" in parts
-        or _contains(parts, (".claude", "settings.json"))
-        or _contains(parts, (".codex", "hooks.json"))
-        or _contains(parts, ("src", "lab", "governance", "checks"))
+        parts[0] == ".org-memory"
+        or parts[:2] == (".claude", "settings.json")
+        or parts[:2] == (".codex", "hooks.json")
+        or parts[:4] == ("src", "lab", "governance", "checks")
     )
 
 
 def _parts(path: str) -> tuple[str, ...]:
-    normalized = posixpath.normpath(path.replace("\\", "/"))
-    return tuple(part for part in normalized.split("/") if part not in ("", "."))
+    return tuple(path.split("/"))
 
 
-def _contains(parts: tuple[str, ...], target: tuple[str, ...]) -> bool:
-    return any(parts[index : index + len(target)] == target for index in range(len(parts)))
+def _run_command(
+    command: tuple[str, ...], cwd: str, timeout_seconds: float, output_limit: int
+) -> CommandResult:
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+            shell=False,
+        )
+        return CommandResult(
+            command,
+            completed.returncode,
+            _bounded(completed.stdout, output_limit),
+            _bounded(completed.stderr, output_limit),
+        )
+    except subprocess.TimeoutExpired as error:
+        return CommandResult(
+            command,
+            None,
+            _bounded(_text(error.stdout), output_limit),
+            _bounded(_text(error.stderr), output_limit),
+            f"timed out after {timeout_seconds:g} seconds",
+        )
+    except OSError as error:
+        return CommandResult(command, None, error=f"{type(error).__name__}: {error}")
 
 
-def _completed_check(result: CommandResult) -> str | None:
-    command = result.command
-    if len(command) >= 3 and PurePosixPath(command[0]).name == "uv" and command[1] == "run":
-        command = command[2:]
-    tool = PurePosixPath(command[0]).name
-    arguments = command[1:]
-    if tool == "ruff" and arguments in (("format", "--check", "."), ("format", ".", "--check")):
-        return "ruff format"
-    if tool == "ruff" and arguments == ("check", "."):
-        return "ruff check"
-    if tool == "mypy" and not arguments:
-        return "mypy"
-    if tool == "pytest" and arguments in ((), ("-q",)):
-        return "pytest"
-    return None
+def _result_output(result: CommandResult, limit: int) -> str:
+    parts = []
+    if result.stdout:
+        parts.append(f"stdout={_bounded(result.stdout, limit)!r}")
+    if result.stderr:
+        parts.append(f"stderr={_bounded(result.stderr, limit)!r}")
+    return "" if not parts else "; " + "; ".join(parts)
+
+
+def _bounded(output: str, limit: int) -> str:
+    return output if len(output) <= limit else output[:limit] + "...[truncated]"
+
+
+def _text(output: str | bytes | None) -> str:
+    return output.decode(errors="replace") if isinstance(output, bytes) else output or ""
