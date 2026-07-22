@@ -94,8 +94,8 @@ PASS
 
 ## P02 — Synthetic order service
 
-Status: NOT_STARTED
-Implementer commit: —
+Status: READY_FOR_REVIEW
+Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Acceptance criteria
 
@@ -107,9 +107,24 @@ Implementer commit: —
 
 ### Implementer evidence
 
-- Files changed:
+- Files changed: `sample_app/domain/order.py`, `sample_app/application/orders.py`,
+  `sample_app/infrastructure/sqlite_orders.py`, `sample_app/cli.py`,
+  `tests/unit/test_order.py`, `tests/contract/test_order_service.py`,
+  `tests/integration/test_order_cli.py`, and this tracker.
 - Commands executed:
-- Results:
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff format --check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run ruff check .`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run mypy`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run pytest -q`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run python -m sample_app.cli --database /private/tmp/p02-cli-evidence.YMOo3Y/orders.sqlite3 create --id order-001 --item widget --quantity 2`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run python -m sample_app.cli --database /private/tmp/p02-cli-evidence.YMOo3Y/orders.sqlite3 get --id order-001`
+  - `UV_CACHE_DIR=/private/tmp/agentic-memory-uv-cache uv run python -m sample_app.cli --database /private/tmp/p02-cli-evidence.YMOo3Y/orders.sqlite3 list`
+  - The same CLI with `get --id missing` and `create --id bad --item widget --quantity 0`.
+- Results: Ruff format `32 files already formatted`; Ruff lint `All checks passed!`; mypy
+  `Success: no issues found in 32 source files`; pytest `9 passed in 1.28s`; create and a separate
+  get process both returned `{"item": "widget", "order_id": "order-001", "quantity": 2}`;
+  list returned the persisted order; missing and invalid commands exited 1 with `order not found:
+  missing` and `quantity must be a positive integer` respectively.
 
 ### Adversarial review
 
