@@ -1,6 +1,7 @@
 """Baseline freeze and verification."""
 
 import platform as runtime_platform
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -38,6 +39,7 @@ def freeze_baseline(root: Path, runs_root: Path, name: str) -> Path:
     _require_clean(root)
     _validate_runs_root(root, runs_root)
     manifest = _capture(root, name)
+    verify_frozen_commit(root, manifest)
     safe_directory(runs_root, "baselines")
     path = _baseline_path(runs_root, name)
     if path.exists() or path.is_symlink():
@@ -51,6 +53,7 @@ def verify_baseline(root: Path, runs_root: Path, name: str) -> BaselineManifest:
     validate_id(name, "baseline name")
     _validate_runs_root(root, runs_root)
     manifest = load_baseline(runs_root, name)
+    verify_frozen_commit(root, manifest)
     verify_frozen_tree(root, manifest)
     return manifest
 
@@ -59,6 +62,28 @@ def verify_frozen_tree(root: Path, manifest: BaselineManifest) -> None:
     actual = _capture(root, manifest.name)
     if actual != manifest:
         raise ValueError("baseline verification failed: repository does not match manifest")
+
+
+def verify_frozen_commit(root: Path, manifest: BaselineManifest) -> None:
+    actual = BaselineManifest(
+        name=manifest.name,
+        git_commit=manifest.git_commit,
+        git_tree=_git(root, "rev-parse", f"{manifest.git_commit}^{{tree}}"),
+        python_version=runtime_platform.python_version(),
+        platform=f"{runtime_platform.system()}-{runtime_platform.machine()}",
+        dependency_lock=_hash_git_file(root, manifest.git_commit, "uv.lock"),
+        memories=_hash_git_tree(root, manifest.git_commit, ".org-memory"),
+        hooks=_hash_git_files(
+            root,
+            manifest.git_commit,
+            (".claude/settings.json", ".codex/hooks.json"),
+        ),
+        governance_checks=_hash_git_tree(root, manifest.git_commit, "src/lab/governance/checks"),
+        platform_config=_hash_git_files(root, manifest.git_commit, PLATFORM_CONFIG_FILES)
+        | _hash_git_tree(root, manifest.git_commit, "agents"),
+    )
+    if actual != manifest:
+        raise ValueError("baseline manifest does not match its frozen Git commit")
 
 
 def load_baseline(runs_root: Path, name: str) -> BaselineManifest:
@@ -104,8 +129,14 @@ def _hash_tree(root: Path, directory: str) -> dict[str, str]:
     base = root / directory
     if base.is_symlink() or not base.is_dir():
         raise ValueError(f"expected a regular directory: {base}")
-    tracked = _git(root, "ls-files", "--", directory).splitlines()
-    return _hash_files(root, tuple(tracked))
+    files = sorted(
+        path
+        for path in base.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix not in (".pyc", ".pyo")
+    )
+    return _hash_files(root, tuple(path.relative_to(root).as_posix() for path in files))
 
 
 def _hash_files(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
@@ -114,6 +145,30 @@ def _hash_files(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
         path = root / relative
         hashes[relative] = sha256_file(path)
     return hashes
+
+
+def _hash_git_tree(root: Path, commit: str, directory: str) -> dict[str, str]:
+    paths = tuple(
+        path
+        for path in _git(root, "ls-tree", "-r", "--name-only", commit, "--", directory).splitlines()
+        if "__pycache__" not in Path(path).parts and Path(path).suffix not in (".pyc", ".pyo")
+    )
+    return _hash_git_files(root, commit, paths)
+
+
+def _hash_git_files(root: Path, commit: str, paths: tuple[str, ...]) -> dict[str, str]:
+    return {path: _hash_git_file(root, commit, path) for path in paths}
+
+
+def _hash_git_file(root: Path, commit: str, path: str) -> str:
+    completed = subprocess.run(
+        ("git", "-C", str(root), "show", f"{commit}:{path}"),
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise ValueError(completed.stderr.decode(errors="replace").strip() or "Git show failed")
+    return hashlib.sha256(completed.stdout).hexdigest()
 
 
 def _require_clean(root: Path) -> None:

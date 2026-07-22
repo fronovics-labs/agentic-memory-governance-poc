@@ -10,6 +10,7 @@ from lab.runs.baseline import (
     load_baseline,
     validate_runs_root,
     verify_baseline,
+    verify_frozen_commit,
     verify_frozen_tree,
 )
 from lab.runs.manifest import (
@@ -65,32 +66,47 @@ def verify_run(root: Path, runs_root: Path, run_id: str) -> RunManifest:
 
 def reset_run(root: Path, runs_root: Path, run_id: str) -> Path:
     manifest = _load_run(root, runs_root, run_id)
-    _require_active(manifest)
-    baseline = _verified_manifest(runs_root, manifest)
+    baseline = _verify_run(root, runs_root, manifest)
     worktree = Path(manifest.worktree)
-    _capture_patch(worktree, _run_dir(runs_root, run_id), manifest.reset_count + 1)
-    _git(root, "worktree", "remove", "--force", str(worktree))
-    _git(root, "worktree", "add", "--detach", str(worktree), baseline.git_commit)
-    updated = replace(manifest, reset_count=manifest.reset_count + 1)
-    write_json(_run_dir(runs_root, run_id) / "run.json", updated.to_dict())
-    _verify_run(root, runs_root, updated)
+    run_dir = _run_dir(runs_root, run_id)
+    sequence = manifest.reset_count + 1
+    temporary, final = _stage_patch(worktree, run_dir, sequence)
+    removed = False
+    try:
+        _git(root, "worktree", "remove", "--force", str(worktree))
+        removed = True
+        _git(root, "worktree", "add", "--detach", str(worktree), baseline.git_commit)
+        updated = replace(manifest, reset_count=sequence)
+        _verify_run(root, runs_root, updated)
+        temporary.replace(final)
+        write_json(run_dir / "run.json", updated.to_dict())
+    except Exception:
+        _finish_failed_patch(temporary, run_dir, sequence, removed)
+        raise
     return worktree
 
 
 def archive_run(root: Path, runs_root: Path, run_id: str) -> Path:
     manifest = _load_run(root, runs_root, run_id)
-    _require_active(manifest)
+    _verify_run(root, runs_root, manifest)
     worktree = Path(manifest.worktree)
     run_dir = _run_dir(runs_root, run_id)
-    patch = _capture_patch(worktree, run_dir, manifest.reset_count + 1, prefix="archive")
-    _git(root, "worktree", "remove", "--force", str(worktree))
+    sequence = manifest.reset_count + 1
+    temporary, final = _stage_patch(worktree, run_dir, sequence, prefix="archive")
+    try:
+        _git(root, "worktree", "remove", "--force", str(worktree))
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    temporary.replace(final)
     write_json(run_dir / "run.json", replace(manifest, status="archived").to_dict())
-    return patch
+    return final
 
 
-def _verify_run(root: Path, runs_root: Path, manifest: RunManifest) -> None:
+def _verify_run(root: Path, runs_root: Path, manifest: RunManifest) -> BaselineManifest:
     _require_active(manifest)
     baseline = _verified_manifest(runs_root, manifest)
+    verify_frozen_commit(root, baseline)
     worktree = Path(manifest.worktree)
     if not worktree.is_dir() or worktree.is_symlink():
         raise ValueError("run worktree is missing or unsafe")
@@ -99,6 +115,7 @@ def _verify_run(root: Path, runs_root: Path, manifest: RunManifest) -> None:
     if _git(worktree, "rev-parse", "HEAD^{tree}") != baseline.git_tree:
         raise ValueError("run tree does not match the frozen baseline")
     verify_frozen_tree(worktree, baseline)
+    return baseline
 
 
 def _verified_manifest(runs_root: Path, run: RunManifest) -> BaselineManifest:
@@ -124,20 +141,57 @@ def _load_run(root: Path, runs_root: Path, run_id: str) -> RunManifest:
     return manifest
 
 
-def _capture_patch(
+def _stage_patch(
     worktree: Path,
     run_dir: Path,
     sequence: int,
     *,
     prefix: str = "reset",
-) -> Path:
+) -> tuple[Path, Path]:
     patches = safe_directory(run_dir, "artifacts", "patches")
-    patch = patches / f"{prefix}-{sequence:04d}.patch"
-    if patch.exists() or patch.is_symlink():
-        raise ValueError(f"patch evidence already exists: {patch}")
-    content = _git(worktree, "diff", "--binary", "HEAD", keep_newline=True)
-    patch.write_text(content, encoding="utf-8")
-    return patch
+    final = patches / f"{prefix}-{sequence:04d}.patch"
+    temporary = patches / f".{prefix}-{sequence:04d}.patch.tmp"
+    if any(path.exists() or path.is_symlink() for path in (final, temporary)):
+        raise ValueError(f"patch evidence already exists: {final}")
+    temporary.write_text(_patch_content(worktree), encoding="utf-8")
+    return temporary, final
+
+
+def _patch_content(worktree: Path) -> str:
+    parts = [_git(worktree, "diff", "--binary", "HEAD", keep_newline=True)]
+    untracked = _git(
+        worktree,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        keep_newline=True,
+    ).split("\0")
+    for relative in sorted(path for path in untracked if path):
+        path = worktree / relative
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(worktree):
+            raise ValueError(f"unsafe untracked evidence path: {relative}")
+        completed = subprocess.run(
+            ("git", "diff", "--binary", "--no-index", "--", "/dev/null", relative),
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode not in (0, 1):
+            raise ValueError(completed.stderr.strip() or "could not capture untracked evidence")
+        parts.append(completed.stdout)
+    return "".join(parts)
+
+
+def _finish_failed_patch(temporary: Path, run_dir: Path, sequence: int, removed: bool) -> None:
+    if not removed:
+        temporary.unlink(missing_ok=True)
+        return
+    failed = safe_directory(run_dir, "artifacts", "patches") / f"failed-reset-{sequence:04d}.patch"
+    if failed.exists() or failed.is_symlink():
+        raise ValueError(f"failed reset evidence already exists: {failed}")
+    temporary.replace(failed)
 
 
 def _require_active(manifest: RunManifest) -> None:
