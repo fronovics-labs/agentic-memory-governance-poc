@@ -516,10 +516,25 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
   hook contracts after adversarial tests, diff check, and real Claude/Codex adapter subprocesses.
   Standard gates passed with `114 passed`; the expanded hook contracts produced `14 failed, 55
   passed`, covering all five defects above.
+- Round 2 clean checkout: detached reviewer worktree at
+  `4b9730bb9186d69299371a8b573d4222afcff771`; clean before re-review.
+- Round 2 diff inspected: focused four-file delta from rejected commit `38bf727` contains the shared
+  core/boundary fixes, regression expectation update, and tracker evidence only; adapters remain thin
+  and no P07 scope was added.
+- Round 2 counterexamples: both real adapter subprocesses deny the nested-cwd protected write and
+  malformed `PreToolUse`; permission-neutral safe calls omit a decision; newline, `$()`, and
+  `bash -lc` destructive resets deny for both clients; an active Stop continuation allows while
+  preserving the completion violation in `systemMessage`. The accepted apply-patch move and safe
+  lookalike controls remain green.
+- Round 2 SOLID/DRY findings: event cwd and Stop continuation state now cross the shared request
+  boundary once, and one renderer, one path normalizer, and one shell classifier serve both clients.
+  No client-specific business rules or duplicate policy lists were introduced.
+- Round 2 commands executed: focused hook contracts (`69 passed`), Ruff format check (`42 files`),
+  Ruff lint, mypy (`42 source files`), full pytest (`130 passed`), and fix-delta diff check. All passed.
 
 ### Verdict
 
-CHANGES_REQUESTED
+PASS
 
 ## P07 — Baseline, worktree and reset lifecycle
 
