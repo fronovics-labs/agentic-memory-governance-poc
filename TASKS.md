@@ -373,16 +373,40 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `7ff1a21edc332db29bcb1b11f1333f25418948e5`; clean before review.
+- Diff inspected: complete seven-file P05 diff against parent `38be6fe`, every governance model,
+  engine/check caller, and the still-inert P06 hook/adapters.
+- Counterexamples: audit/block returned identical ordered violations with only `allowed` differing;
+  a two-violation check, crashing check, and later check all survived in order. Unknown mode and
+  duplicate IDs rejected. Exact protected paths, normalized aliases, rename source/destination,
+  sibling-prefix controls, selected-manifest alias/sibling, and manifest mismatch behaved as intended.
+- SOLID findings: the engine imports only protocols/models and contains one generic aggregation loop;
+  concrete platform checks are injected. No concrete-check conditional, P06 behavior, hook logic, or
+  experiment-specific check exists.
+- DRY findings: path matching, manifest comparison, completion-name recognition, and engine
+  aggregation are each centralized; no audit/block duplication.
+- Defects: completion commands are never run. `CompletionCommandsCheck` only trusts caller-created
+  `CommandResult(command, exit_code)` values; there is no production caller/runner, subprocess use,
+  timeout/OSError/output representation, bounded output, or all-run behavior. Four fabricated zero
+  exit codes pass all completion gates without executing Ruff, mypy, or pytest, so the P05 completion
+  requirement is false-accepting.
+  Path canonicalization also accepts empty, absolute, Windows-drive, and root-escaping targets such
+  as `../../etc/passwd` with no violation. Conversely, because protected segments may occur anywhere,
+  safe repo-relative lookalikes such as `vendor/.org-memory/A.md`,
+  `vendor/.claude/settings.json`, and `copy/src/lab/governance/checks/x.py` are falsely blocked.
+  Paths must be validated as normalized repo-relative identities and matched only at the repository
+  root. Finally, the engine accepts a blank check ID, extends a returned `list[str]` into the result,
+  and accepts a check returning a `Violation` with another check's ID. Invalid IDs/outputs must fail
+  honestly instead of corrupting or spoofing governance results.
+- Commands executed: Ruff format/lint (40 files), mypy (40 files), full pytest (46 passed), focused
+  governance pytest (7 passed), diff check, direct aggregation/crash/parity/malformed-output checks,
+  table-driven protected/unsafe/lookalike/rename/manifest paths, and forged completion results.
+  Standard gates passed; the three fail-open counterexample groups did not.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P06 — Claude and Codex adapters
 
