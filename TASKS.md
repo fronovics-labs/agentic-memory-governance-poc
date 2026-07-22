@@ -569,16 +569,40 @@ Implementer commit: HEAD (resolved to the commit supplied for review)
 
 ### Adversarial review
 
-- Clean checkout:
-- Diff inspected:
-- Counterexamples:
-- SOLID findings:
-- DRY findings:
-- Commands executed:
+- Clean checkout: detached reviewer worktree at
+  `df80c3cc23a308faa141a1713d0c97e0a8d836f2`; clean before review.
+- Diff inspected: complete six-file P07 delta from the accepted P06 review, including manifest
+  schemas/hashing, baseline capture, run lifecycle, CLI composition, disposable-Git tests, and
+  tracker. No P08 client launch, native-memory, or client-home behavior was added.
+- Counterexamples: a real detached run containing an untracked governed memory still passes
+  `run verify`. Reset and archive each emit an empty patch for an untracked application file and then
+  delete its only copy. Locking the real worktree makes reset fail after `reset-0001.patch` is written;
+  after unlock, retry is rejected because that patch filename already exists. Coordinated valid-schema
+  baseline/run-manifest tampering is detected only after reset removes and recreates the worktree,
+  replacing a modified file before reporting the mismatch. Existing clean create/verify, detached
+  HEAD, tracked changes, unrelated worktree, artifact symlink, and three-reset controls pass.
+- SOLID findings: baseline/manifest/workspace responsibilities are separated and the CLI delegates to
+  them; Git uses fixed argv without shell interpolation. However, reset/archive lack a transaction or
+  recoverable operation ordering around evidence capture, removal, recreation, manifest update, and
+  post-verification.
+- DRY findings: ID validation, JSON schemas, external-directory checks, hashing, Git execution, and
+  patch capture are centralized. The shared tracked-only inventory and shared patch capture cause the
+  same evidence-loss defects consistently rather than duplicating them.
+- Defects: `_hash_tree` inventories only `git ls-files`, so added untracked memory or governance files
+  are excluded from baseline/run verification even though they can change controlled behavior.
+  `_capture_patch` uses `git diff --binary HEAD`, which omits untracked files; reset/archive then remove
+  the worktree and permanently lose that evidence. Reset writes its numbered patch before worktree
+  removal, but does not roll it back or advance state when removal fails, permanently poisoning the
+  next retry. Finally, reset validates only the baseline-manifest file checksum before deletion; if
+  baseline and run metadata are tampered consistently, the content mismatch is discovered only after
+  destructive remove/recreate, so the original run state is lost despite the failing reset.
+- Commands executed: Ruff format check, Ruff lint, mypy, full pytest, focused disposable-Git
+  lifecycle tests, full P07 diff inspection, and diff check. Standard gates passed with `138 passed`;
+  expanded real lifecycle attacks produced `5 failed, 8 passed`, covering all four defects above.
 
 ### Verdict
 
-PENDING
+CHANGES_REQUESTED
 
 ## P08 — Client launch isolation
 

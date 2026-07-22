@@ -8,7 +8,7 @@ import pytest
 
 from lab.cli import main
 from lab.runs.baseline import default_runs_root, freeze_baseline, verify_baseline
-from lab.runs.manifest import RunManifest, read_json
+from lab.runs.manifest import RunManifest, read_json, sha256_file
 from lab.runs.workspace import archive_run, create_run, reset_run, verify_run
 
 
@@ -205,3 +205,68 @@ def test_artifact_symlink_cannot_redirect_reset_patch(tmp_path: Path) -> None:
         reset_run(root, runs_root, "run-001")
     assert worktree.is_dir()
     assert list(outside.iterdir()) == []
+
+
+def test_verify_rejects_untracked_governed_files(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    (worktree / ".org-memory" / "items" / "injected.md").write_text("untracked policy\n")
+
+    with pytest.raises(ValueError, match="does not match"):
+        verify_run(root, runs_root, "run-001")
+
+
+@pytest.mark.parametrize("operation", ["reset", "archive"])
+def test_lifecycle_patch_preserves_untracked_files(tmp_path: Path, operation: str) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    created = worktree / "sample_app" / "new_evidence.py"
+    created.write_text("EVIDENCE = True\n")
+
+    patch = (
+        reset_run(root, runs_root, "run-001")
+        if operation == "reset"
+        else archive_run(root, runs_root, "run-001")
+    )
+    if operation == "reset":
+        patch = runs_root / "runs" / "run-001" / "artifacts" / "patches" / "reset-0001.patch"
+
+    assert "sample_app/new_evidence.py" in Path(patch).read_text()
+
+
+def test_failed_worktree_removal_does_not_poison_reset_retry(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    (worktree / "sample_app" / "service.py").write_text("VALUE = 2\n")
+    _git(root, "worktree", "lock", str(worktree))
+
+    with pytest.raises(ValueError):
+        reset_run(root, runs_root, "run-001")
+    assert worktree.is_dir()
+    _git(root, "worktree", "unlock", str(worktree))
+
+    assert reset_run(root, runs_root, "run-001") == worktree
+
+
+def test_reset_verifies_manifest_contents_before_removing_worktree(tmp_path: Path) -> None:
+    root, runs_root = _repository(tmp_path)
+    baseline_path = freeze_baseline(root, runs_root, "platform-v1")
+    worktree = create_run(root, runs_root, "run-001", "audit")
+    service = worktree / "sample_app" / "service.py"
+    service.write_text("VALUE = 99\n")
+
+    baseline = read_json(baseline_path)
+    baseline["dependency_lock"] = "0" * 64
+    baseline_path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
+    run_path = runs_root / "runs" / "run-001" / "run.json"
+    run = read_json(run_path)
+    run["baseline_manifest_sha256"] = sha256_file(baseline_path)
+    run_path.write_text(json.dumps(run, indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(ValueError, match="does not match"):
+        reset_run(root, runs_root, "run-001")
+
+    assert service.read_text() == "VALUE = 99\n"
